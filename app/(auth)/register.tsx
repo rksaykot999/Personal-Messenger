@@ -1,0 +1,242 @@
+import React, { useState, useRef } from 'react';
+import {
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  ScrollView, KeyboardAvoidingView, Platform, Alert, StatusBar, Animated,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { PremiumButton } from '@/components/ui/PremiumButton';
+import { GradientAvatar } from '@/components/ui/GradientAvatar';
+
+export default function RegisterScreen() {
+  const { theme } = useTheme();
+  const { register } = useAuth();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  const shake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 6, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const handleRegister = async () => {
+    if (!name.trim() || !email.trim() || !password || !confirm) {
+      shake();
+      Alert.alert('Missing info', 'Please fill in all fields.');
+      return;
+    }
+    if (password !== confirm) {
+      shake();
+      Alert.alert('Password mismatch', 'Passwords do not match.');
+      return;
+    }
+    if (password.length < 6) {
+      shake();
+      Alert.alert('Weak password', 'Password must be at least 6 characters.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await register(email.trim().toLowerCase(), password, name.trim());
+      router.replace('/(tabs)' as any);
+    } catch (e: any) {
+      shake();
+      Alert.alert('Registration Failed', e.message || 'Something went wrong.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <View style={[styles.glow, { backgroundColor: theme.secondary }]} />
+
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            {name.trim() ? (
+              <View style={{ marginBottom: 16 }}>
+                <GradientAvatar name={name.trim() || 'U'} size={72} />
+              </View>
+            ) : (
+              <Image
+                source={require('../../assets/pm_logo.png')}
+                style={styles.logoImage}
+                contentFit="contain"
+              />
+            )}
+            <Text style={[styles.title, { color: theme.text }]}>Create account</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              Join Personal Messenger and stay connected
+            </Text>
+          </View>
+
+          {/* Form */}
+          <Animated.View style={[styles.form, { transform: [{ translateX: shakeAnim }] }]}>
+            {/* Name */}
+            <View style={[styles.inputWrap, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+              <Ionicons name="person-outline" size={20} color={theme.textTertiary} />
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="Display name"
+                placeholderTextColor={theme.textTertiary}
+                style={[styles.input, { color: theme.text }]}
+              />
+            </View>
+
+            {/* Email */}
+            <View style={[styles.inputWrap, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+              <Ionicons name="mail-outline" size={20} color={theme.textTertiary} />
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email address"
+                placeholderTextColor={theme.textTertiary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={[styles.input, { color: theme.text }]}
+              />
+            </View>
+
+            {/* Password */}
+            <View style={[styles.inputWrap, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+              <Ionicons name="lock-closed-outline" size={20} color={theme.textTertiary} />
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password (min 6 chars)"
+                placeholderTextColor={theme.textTertiary}
+                secureTextEntry={!showPass}
+                style={[styles.input, { color: theme.text }]}
+              />
+              <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.textTertiary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Confirm password */}
+            <View style={[styles.inputWrap, {
+              backgroundColor: theme.inputBg,
+              borderColor: confirm && confirm !== password ? theme.error : theme.border,
+            }]}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={theme.textTertiary} />
+              <TextInput
+                value={confirm}
+                onChangeText={setConfirm}
+                placeholder="Confirm password"
+                placeholderTextColor={theme.textTertiary}
+                secureTextEntry={!showPass}
+                style={[styles.input, { color: theme.text }]}
+              />
+              {confirm.length > 0 && (
+                <Ionicons
+                  name={confirm === password ? 'checkmark-circle' : 'close-circle'}
+                  size={20}
+                  color={confirm === password ? theme.success : theme.error}
+                />
+              )}
+            </View>
+
+            <PremiumButton title="Create Account" onPress={handleRegister} loading={loading} size="lg" />
+
+            <View style={styles.divider}>
+              <View style={[styles.divLine, { backgroundColor: theme.border }]} />
+              <Text style={[styles.divText, { color: theme.textTertiary }]}>or continue with</Text>
+              <View style={[styles.divLine, { backgroundColor: theme.border }]} />
+            </View>
+
+            {/* Social Logins */}
+            <View style={styles.socialWrap}>
+              <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Google Sign-In will be available soon.')}>
+                <Ionicons name="logo-google" size={24} color={theme.text} />
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Apple Sign-In will be available soon.')}>
+                <Ionicons name="logo-apple" size={24} color={theme.text} />
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Facebook Sign-In will be available soon.')}>
+                <Ionicons name="logo-facebook" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => router.replace('/(auth)/login' as any)}
+              style={[styles.loginBtn, { borderColor: theme.borderStrong }]}
+            >
+              <Text style={[styles.loginText, { color: theme.text }]}>
+                Already have an account?{' '}
+                <Text style={{ color: theme.primary, fontWeight: '700' }}>Sign In</Text>
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  glow: {
+    position: 'absolute',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    bottom: -80,
+    right: -60,
+    opacity: 0.1,
+  },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 60 },
+  header: { alignItems: 'center', marginBottom: 36 },
+  logoImage: {
+    width: 90,
+    height: 90,
+    marginBottom: 16,
+  },
+  title: { fontSize: 28, fontWeight: '800', marginBottom: 8, letterSpacing: -0.3 },
+  subtitle: { fontSize: 15, textAlign: 'center' },
+  form: { gap: 14 },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  input: { flex: 1, fontSize: 15, paddingVertical: 0 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 4 },
+  divLine: { flex: 1, height: 1 },
+  divText: { fontSize: 13 },
+  loginBtn: { paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, alignItems: 'center', marginTop: 10 },
+  loginText: { fontSize: 14 },
+  socialWrap: { flexDirection: 'row', justifyContent: 'center', gap: 16 },
+  socialBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
