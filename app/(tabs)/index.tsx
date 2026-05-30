@@ -53,6 +53,7 @@ interface Chat {
     isOnline: boolean;
     lastSeen: any;
   };
+  typing?: { [uid: string]: boolean };
   mutedBy?: string[];
   archivedBy?: string[];
 }
@@ -530,6 +531,11 @@ export default function ChatsScreen() {
             ? (item.lastMessage.includes('.mp4') || item.lastMessage.includes('video') ? '🎥 Video' : '📷 Photo')
             : item.lastMessage || 'Start a conversation';
 
+          const typingUsers = item.typing || {};
+          const isTypingPreview = Object.entries(typingUsers).some(
+            ([uid, typing]) => uid !== user?.uid && typing === true,
+          );
+
           const isMuted = !!(item.mutedBy?.includes(user?.uid || ''));
           const isArchived = !!(item.archivedBy?.includes(user?.uid || ''));
 
@@ -552,6 +558,7 @@ export default function ChatsScreen() {
               photoURL={item.type === 'group' ? item.groupPhotoURL : item.otherUser?.photoURL}
               isSent={item.lastMessageSenderId === user?.uid}
               isRead={isRead}
+              isTyping={isTypingPreview}
               isMuted={isMuted}
               isArchived={isArchived}
               onPress={handleItemPress}

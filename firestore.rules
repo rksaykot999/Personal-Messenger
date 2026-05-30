@@ -1,21 +1,45 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getChat(chatId) {
+      return get(/databases/$(database)/documents/chats/$(chatId));
+    }
+
+    function isChatMember(chatId) {
+      return isSignedIn() && getChat(chatId).exists() && request.auth.uid in getChat(chatId).data.participants;
+    }
+
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
 
     match /calls/{callId} {
-      allow read, update, delete: if request.auth != null && (
+      allow read, update, delete: if isSignedIn() && (
         request.auth.uid == resource.data.receiverId ||
         request.auth.uid == resource.data.callerId ||
+        (request.resource != null && (request.auth.uid == request.resource.data.receiverId || request.auth.uid == request.resource.data.callerId))
+      );
+      allow create: if isSignedIn() && (
         request.auth.uid == request.resource.data.receiverId ||
         request.auth.uid == request.resource.data.callerId
       );
-      allow create: if request.auth != null && (
-        request.auth.uid == request.resource.data.receiverId ||
-        request.auth.uid == request.resource.data.callerId
-      );
+    }
+
+    match /chats/{chatId} {
+      allow read, write: if isChatMember(chatId);
+
+      match /messages/{messageId} {
+        allow read, create, update, delete: if isChatMember(chatId);
+      }
+
+      match /typing/{typingUserId} {
+        allow read: if isChatMember(chatId);
+        allow create, update, delete: if isChatMember(chatId) && request.auth.uid == typingUserId;
+      }
     }
   }
 }

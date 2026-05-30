@@ -4,7 +4,7 @@ import { TypingIndicator } from "@/components/ui/TypingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { db } from "@/services/firebase";
-import { sendPushNotificationAsync, dismissAllNotifications } from "@/services/notifications";
+import { dismissAllNotifications, sendPushNotificationAsync } from "@/services/notifications";
 import { uploadToSupabaseRest } from "@/services/supabase";
 import { endActiveWebRTCCall, isWebRTCSupported, startOutgoingWebRTCCall } from "@/services/webrtcCalls";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,7 +15,6 @@ import { router, useLocalSearchParams } from "expo-router";
 import {
   addDoc,
   arrayRemove,
-  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -27,7 +26,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  updateDoc,
+  updateDoc
 } from "firebase/firestore";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -55,7 +54,7 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
   const id = propChatId || paramId;
   const { theme } = useTheme();
   const { user, userProfile } = useAuth();
-  
+
   const { width } = useWindowDimensions();
   const isWide = width >= 768;
 
@@ -120,8 +119,8 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
   const chatSubtitle = isGroupChat
     ? `${chatInfo?.participants?.length || 0} members`
     : otherUser?.isOnline
-    ? "● Online"
-    : "Offline";
+      ? "● Online"
+      : "Offline";
   const chatPhotoURL = isGroupChat ? chatInfo?.groupPhotoURL : otherUser?.photoURL;
   const isBlockedByMe = !isGroupChat && otherUser && (userProfile as any)?.blockedUsers?.includes(otherUser.uid);
   const isBlockedByThem = !isGroupChat && otherUser && otherUser.blockedUsers?.includes(user?.uid);
@@ -134,7 +133,7 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
         email: userProfile?.email || user.email || "",
       };
     }
-    
+
     const member = groupMembers.find(m => m.uid === uid);
     if (member) {
       return {
@@ -358,8 +357,8 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
             ? `📷 ${caption.trim()}`
             : `🎥 ${caption.trim()}`
           : mediaType === "image"
-          ? "📷 Photo"
-          : "🎥 Video",
+            ? "📷 Photo"
+            : "🎥 Video",
         lastMessageTime: serverTimestamp(),
         lastMessageSenderId: user.uid,
         deletedFor: [],
@@ -369,13 +368,13 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
       // Send Push Notification
       const senderName = userProfile?.displayName || user.displayName || "Someone";
       const notifText = caption.trim()
-          ? mediaType === "image"
-            ? `📷 ${caption.trim()}`
-            : `🎥 ${caption.trim()}`
-          : mediaType === "image"
+        ? mediaType === "image"
+          ? `📷 ${caption.trim()}`
+          : `🎥 ${caption.trim()}`
+        : mediaType === "image"
           ? "📷 Photo"
           : "🎥 Video";
-          
+
       const isOtherUserMuted = chatInfo?.mutedBy?.includes(otherUser?.uid || "");
       if (!isGroupChat && otherUser?.pushToken && !isOtherUserMuted) {
         sendPushNotificationAsync(otherUser.pushToken, senderName, notifText, { url: `/chat/${id}` });
@@ -585,11 +584,15 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
     if (!id || !user) return;
     // Set typing indicator securely with try-catch to prevent fatal crashes
     try {
+      const isTypingValue = text.trim().length > 0;
       await setDoc(
         doc(db, "chats", id, "typing", user.uid),
-        { isTyping: text.trim().length > 0 },
+        { isTyping: isTypingValue },
         { merge: true },
       );
+      await updateDoc(doc(db, "chats", id), {
+        [`typing.${user.uid}`]: isTypingValue,
+      });
     } catch (e) {
       console.warn("Typing indicator write error (check Firestore rules):", e);
     }
@@ -607,6 +610,14 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
           "Typing indicator clear error (check Firestore rules):",
           e,
         );
+      }
+
+      try {
+        await updateDoc(doc(db, "chats", id), {
+          [`typing.${user.uid}`]: false,
+        });
+      } catch (e) {
+        console.warn("Could not clear chat typing state:", e);
       }
     }, 2000);
   };
@@ -626,6 +637,14 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
           text: text,
           isEdited: true, // mark as edited!
         });
+
+        if (messages[0]?.id === editingMsg.id) {
+          await updateDoc(doc(db, "chats", id), {
+            lastMessage: text,
+            lastMessageTime: serverTimestamp(),
+          });
+        }
+
         setEditingMsg(null);
         inputRef.current?.blur();
       } catch (e: any) {
@@ -708,7 +727,7 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
     setReactionModalVisible(false);
     try {
       const msgRef = doc(db, "chats", id, "messages", selectedMsg.id);
-      
+
       // Get the absolute latest message object from the active list state to avoid stale snap closures
       const latestMsg = messages.find((m) => m.id === selectedMsg.id) || selectedMsg;
       const reactions = latestMsg.reactions || {};
@@ -726,8 +745,8 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
 
       if (!wasAlreadyReactedWithThisEmoji) {
         // Read either the updated list from step 1 or fall back to the existing list
-        const currentList = updates[`reactions.${emoji}`] !== undefined 
-          ? updates[`reactions.${emoji}`] 
+        const currentList = updates[`reactions.${emoji}`] !== undefined
+          ? updates[`reactions.${emoji}`]
           : (reactions[emoji] || []);
         updates[`reactions.${emoji}`] = [...currentList, user.uid];
       }
@@ -1053,12 +1072,12 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
 
       // Send Push Notification
       if (targetFriend.pushToken) {
-         sendPushNotificationAsync(
-            targetFriend.pushToken,
-            userProfile?.displayName || user!.displayName || "Someone",
-            "Forwarded a message",
-            { url: `/chat/${chatId}` }
-         );
+        sendPushNotificationAsync(
+          targetFriend.pushToken,
+          userProfile?.displayName || user!.displayName || "Someone",
+          "Forwarded a message",
+          { url: `/chat/${chatId}` }
+        );
       }
 
       Alert.alert(
@@ -1178,8 +1197,8 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
             const showTime =
               !prevMsg ||
               (item.createdAt?.seconds || 0) -
-                (prevMsg.createdAt?.seconds || 0) >
-                300;
+              (prevMsg.createdAt?.seconds || 0) >
+              300;
 
             const senderName = item.senderName || (isGroupChat ? (groupMembers.find(m => m.uid === item.senderId)?.displayName || chatInfo?.participantNames?.[item.senderId]) : otherUser?.displayName) || "Someone";
             const senderPhotoURL = item.senderPhotoURL || (isGroupChat ? groupMembers.find(m => m.uid === item.senderId)?.photoURL : otherUser?.photoURL) || null;
@@ -2309,8 +2328,8 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
               </Text>
             </View>
 
-            <ScrollView 
-              contentContainerStyle={{ paddingBottom: 24 }} 
+            <ScrollView
+              contentContainerStyle={{ paddingBottom: 24 }}
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.reactorsList}>
@@ -2395,7 +2414,7 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
               </Text>
             </View>
 
-            <ScrollView 
+            <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 20 }}
             >

@@ -1,8 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GradientAvatar } from './GradientAvatar';
 
 export interface Message {
@@ -53,8 +53,8 @@ export function MessageBubble({
 
   const bubbleColor = isMe ? theme.myBubble : theme.theirBubble;
   const textColor = isMe ? theme.myBubbleText : theme.theirBubbleText;
-  const reactions = message.reactions 
-    ? Object.entries(message.reactions).filter(([_, users]) => Array.isArray(users) && users.length > 0) 
+  const reactions = message.reactions
+    ? Object.entries(message.reactions).filter(([_, users]) => Array.isArray(users) && users.length > 0)
     : [];
 
   const resolvedSenderName = senderName || "Someone";
@@ -155,14 +155,17 @@ export function MessageBubble({
             <Text style={[styles.time, { color: isMe ? 'rgba(255,255,255,0.65)' : theme.textTertiary }]}>
               {formatTime(message.createdAt)}
             </Text>
+            {message.isEdited && (
+              <Text style={[styles.editedLabel, { color: isMe ? 'rgba(255,255,255,0.65)' : theme.textTertiary }]}>Edited</Text>
+            )}
             {isMe && (
               <Ionicons
                 name={
                   message.status === 'read'
                     ? 'checkmark-done'
                     : message.status === 'delivered'
-                    ? 'checkmark-done'
-                    : 'checkmark'
+                      ? 'checkmark-done'
+                      : 'checkmark'
                 }
                 size={13}
                 color={message.status === 'read' ? '#00D4AA' : 'rgba(255,255,255,0.65)'}
@@ -217,6 +220,12 @@ const styles = StyleSheet.create({
   },
   bubbleWrapper: {
     maxWidth: '80%',
+  },
+  editedLabel: {
+    fontSize: 11,
+    marginLeft: 6,
+    alignSelf: 'center',
+    fontStyle: 'italic',
   },
   bubbleWrapperRight: {
     alignSelf: 'flex-end',
