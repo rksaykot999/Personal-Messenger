@@ -5,7 +5,7 @@ import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import React, { useEffect, useRef } from 'react';
-import { Alert, Animated, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { GradientAvatar } from '@/components/ui/GradientAvatar';
@@ -318,11 +318,10 @@ function StartupAnimation({ theme }: { theme: any }) {
           end={{ x: 1, y: 1 }}
           style={startupStyles.logoGradient}
         >
-          <Ionicons name="chatbubble-ellipses" size={52} color="#fff" />
+          <Image source={require('../assets/pm_logo.png')} style={startupStyles.logoImage} resizeMode="contain" />
         </LinearGradient>
       </Animated.View>
 
-      {/* App name */}
       <Animated.Text style={[startupStyles.appName, { color: theme.text, opacity: textOpacity }]}>
         Personal Messenger
       </Animated.Text>
@@ -473,6 +472,10 @@ const startupStyles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 24,
     elevation: 12,
+  },
+  logoImage: {
+    width: 64,
+    height: 64,
   },
   appName: {
     fontSize: 28,

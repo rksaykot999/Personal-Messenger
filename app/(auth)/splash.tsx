@@ -89,7 +89,7 @@ export default function SplashScreen() {
       </Animated.View>
 
       <Text style={[styles.footer, { color: theme.textTertiary }]}>
-        Personal Messenger v6.0.0 · Secure · Private
+        Personal Messenger v4.3.0 · Secure · Private
       </Text>
     </View>
   );

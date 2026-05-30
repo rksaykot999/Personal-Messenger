@@ -1954,12 +1954,13 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
                   gap: 12,
                 }}
               >
+                {/* FIX: Changed background from light to dark so white text is visible */}
                 <View
                   style={{
                     flex: 1,
                     flexDirection: "row",
                     alignItems: "center",
-                    backgroundColor: "rgba(255,255,255,0.15)",
+                    backgroundColor: "rgba(0,0,0,0.5)",
                     borderRadius: 24,
                     paddingHorizontal: 16,
                     paddingVertical: 8,
@@ -2427,7 +2428,10 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
                     {category.emojis.map((emoji) => (
                       <TouchableOpacity
                         key={emoji}
-                        onPress={() => handleEmojiSelect(emoji)}
+                        onPress={() => {
+                          handleEmojiSelect(emoji);
+                          setEmojiPickerVisible(false); // FIX: close picker so input is visible
+                        }}
                         activeOpacity={0.6}
                         style={[styles.emojiGridItem, { backgroundColor: theme.surface }]}
                       >

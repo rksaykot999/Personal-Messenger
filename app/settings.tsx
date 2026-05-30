@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import Constants from 'expo-constants';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -12,6 +13,9 @@ export default function SettingsScreen() {
   const { theme, isDark, toggleTheme } = useTheme();
   const { logout } = useAuth();
   const statusBarH = Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 44;
+
+  // Dynamically read the app version from app.json
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
 
   const sections = [
     {
@@ -47,7 +51,8 @@ export default function SettingsScreen() {
     {
       title: 'About',
       items: [
-        { icon: 'information-circle-outline', label: 'Version 6.0.0', type: 'info' },
+        // ✅ Now uses the real version from app.json
+        { icon: 'information-circle-outline', label: `Version ${appVersion}`, type: 'info' },
         { icon: 'shield-outline', label: 'Privacy Policy', type: 'nav', onPress: () => {} },
         { icon: 'document-text-outline', label: 'Terms of Service', type: 'nav', onPress: () => {} },
       ],
