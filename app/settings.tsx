@@ -47,7 +47,7 @@ export default function SettingsScreen() {
     {
       title: 'About',
       items: [
-        { icon: 'information-circle-outline', label: 'Version 4.0.0', type: 'info' },
+        { icon: 'information-circle-outline', label: 'Version 6.0.0', type: 'info' },
         { icon: 'shield-outline', label: 'Privacy Policy', type: 'nav', onPress: () => {} },
         { icon: 'document-text-outline', label: 'Terms of Service', type: 'nav', onPress: () => {} },
       ],
