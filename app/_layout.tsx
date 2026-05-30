@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, Animated, Modal, TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
+import { View, Animated, Modal, TouchableOpacity, Text, StyleSheet, Alert, Platform } from 'react-native';
 import 'react-native-reanimated';
 import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,12 @@ import { ThemeProvider as AppThemeProvider, useTheme } from '@/contexts/ThemeCon
 import { db } from '@/services/firebase';
 import { GradientAvatar } from '@/components/ui/GradientAvatar';
 import { acceptIncomingWebRTCCall, endActiveWebRTCCall, isWebRTCSupported } from '@/services/webrtcCalls';
+import {
+  addNotificationReceivedListener,
+  addNotificationResponseReceivedListener,
+  removeNotificationSubscription,
+  registerForPushNotificationsAsync,
+} from '@/services/notifications';
 
 interface IncomingCall {
   id: string;
@@ -155,11 +161,131 @@ function IncomingCallListener() {
   );
 }
 
+// ─── Foreground In-App Notification Banner ──────────────────────────────────
+interface BannerData {
+  title: string;
+  body: string;
+  chatId?: string;
+}
+
+function NotificationBanner() {
+  const { theme } = useTheme();
+  const [banner, setBanner] = React.useState<BannerData | null>(null);
+  const slideY = useRef(new Animated.Value(-120)).current;
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showBanner = React.useCallback((data: BannerData) => {
+    setBanner(data);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    Animated.spring(slideY, { toValue: 0, useNativeDriver: true, tension: 70, friction: 10 }).start();
+    hideTimer.current = setTimeout(() => hideBanner(), 4000);
+  }, [slideY]);
+
+  const hideBanner = React.useCallback(() => {
+    Animated.timing(slideY, { toValue: -120, duration: 300, useNativeDriver: true }).start(() => {
+      setBanner(null);
+    });
+  }, [slideY]);
+
+  useEffect(() => {
+    const sub = addNotificationReceivedListener((notification: any) => {
+      const { title, body, data } = notification.request.content;
+      showBanner({ title: title || 'New message', body: body || '', chatId: data?.chatId });
+    });
+    return () => removeNotificationSubscription(sub);
+  }, [showBanner]);
+
+  if (!banner) return null;
+
+  const statusH = Platform.OS === 'android' ? 32 : 54;
+
+  return (
+    <Animated.View
+      style={[
+        bannerStyles.bannerWrap,
+        { top: statusH, transform: [{ translateY: slideY }] },
+      ]}
+    >
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => {
+          hideBanner();
+          if (banner.chatId) router.push(`/chat/${banner.chatId}` as any);
+        }}
+        style={[bannerStyles.bannerCard, { backgroundColor: theme.surface || theme.background }]}
+      >
+        <LinearGradient
+          colors={[theme.primary, theme.secondary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={bannerStyles.bannerIcon}
+        >
+          <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+        </LinearGradient>
+        <View style={bannerStyles.bannerText}>
+          <Text style={[bannerStyles.bannerTitle, { color: theme.text }]} numberOfLines={1}>
+            {banner.title}
+          </Text>
+          <Text style={[bannerStyles.bannerBody, { color: theme.textSecondary }]} numberOfLines={2}>
+            {banner.body}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={hideBanner} style={bannerStyles.closeBtn}>
+          <Ionicons name="close" size={18} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+const bannerStyles = StyleSheet.create({
+  bannerWrap: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 9999,
+  },
+  bannerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    padding: 12,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 12,
+  },
+  bannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerText: {
+    flex: 1,
+    gap: 2,
+  },
+  bannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bannerBody: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  closeBtn: {
+    padding: 4,
+  },
+});
+
 function StartupAnimation({ theme }: { theme: any }) {
   const logoScale = useRef(new Animated.Value(0.2)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
-  const dotOpacity = useRef(new Animated.Value(0.3)).current;
+  const progressWidth = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Logo spring in
@@ -171,13 +297,12 @@ function StartupAnimation({ theme }: { theme: any }) {
       Animated.timing(textOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
     });
 
-    // Pulse the loading dots
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(dotOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(dotOpacity, { toValue: 0.3, duration: 600, useNativeDriver: true }),
-      ])
-    ).start();
+    // Animate progress bar to 100% over 2000ms
+    Animated.timing(progressWidth, {
+      toValue: 1,
+      duration: 2000,
+      useNativeDriver: false,
+    }).start();
   }, []);
 
   return (
@@ -206,11 +331,20 @@ function StartupAnimation({ theme }: { theme: any }) {
         Stay close, no matter the distance
       </Animated.Text>
 
-      {/* Pulsing loading indicator */}
-      <Animated.View style={[startupStyles.dotsRow, { opacity: dotOpacity }]}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={[startupStyles.dot, { backgroundColor: theme.primary }]} />
-        ))}
+      {/* Premium progress bar */}
+      <Animated.View style={[startupStyles.progressContainer, { opacity: textOpacity }]}>
+        <Animated.View
+          style={[
+            startupStyles.progressBar,
+            {
+              backgroundColor: theme.primary,
+              width: progressWidth.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0%', '100%'],
+              }),
+            },
+          ]}
+        />
       </Animated.View>
     </View>
   );
@@ -219,18 +353,66 @@ function StartupAnimation({ theme }: { theme: any }) {
 function RootContent() {
   const { user, loading } = useAuth();
   const { theme, mode } = useTheme();
+  const [isAppReady, setIsAppReady] = React.useState(false);
+
+  // ─── Push notification token registration ──────────────────────────────
+  useEffect(() => {
+    if (user) {
+      registerForPushNotificationsAsync().catch(console.warn);
+    }
+  }, [user]);
+
+  // ─── Notification tap → navigate to chat ───────────────────────────────
+  useEffect(() => {
+    const responseSub = addNotificationResponseReceivedListener((response: any) => {
+      const chatId = response?.notification?.request?.content?.data?.chatId;
+      if (chatId) {
+        router.push(`/chat/${chatId}` as any);
+      }
+    });
+    return () => removeNotificationSubscription(responseSub);
+  }, []);
 
   useEffect(() => {
+    let active = true;
+    
+    // Set a guaranteed 2 second minimum loading preloader
+    const timer = setTimeout(() => {
+      if (active && !loading) {
+        setIsAppReady(true);
+      }
+    }, 2000);
+
     if (!loading) {
+      const checkTimer = setTimeout(() => {
+        if (active) {
+          setIsAppReady(true);
+        }
+      }, 0);
+      return () => {
+        active = false;
+        clearTimeout(timer);
+        clearTimeout(checkTimer);
+      };
+    }
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [loading]);
+
+  useEffect(() => {
+    if (isAppReady) {
       if (user) {
         router.replace('/(tabs)' as any);
       } else {
         router.replace('/(auth)/splash' as any);
       }
     }
-  }, [user, loading]);
+  }, [user, isAppReady]);
 
-  if (loading) {
+  if (!isAppReady) {
     return <StartupAnimation theme={theme} />;
   }
 
@@ -255,6 +437,7 @@ function RootContent() {
         <Stack.Screen name="profile-blocked-users" options={{ animation: 'slide_from_right' }} />
       </Stack>
       <IncomingCallListener />
+      <NotificationBanner />
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
     </ThemeProvider>
   );
@@ -308,18 +491,19 @@ const startupStyles = StyleSheet.create({
   tagline: {
     fontSize: 14,
     fontWeight: '500',
-    marginBottom: 28,
+    marginBottom: 10,
   },
-  dotsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    position: 'absolute',
-    bottom: 60,
+  progressContainer: {
+    width: 200,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 2,
+    marginTop: 12,
+    overflow: 'hidden',
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  progressBar: {
+    height: '100%',
+    borderRadius: 2,
   },
 });
 

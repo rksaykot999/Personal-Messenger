@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/services/firebase';
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { sendPushNotificationAsync } from '@/services/notifications';
+import { startOutgoingWebRTCCall, endActiveWebRTCCall, isWebRTCSupported } from '@/services/webrtcCalls';
 
 interface CallTarget {
   uid: string;
@@ -111,6 +112,13 @@ export default function CallsScreen() {
       Alert.alert('Call unavailable', 'This call entry is missing a receiver account. Start a call from your friends list.');
       return;
     }
+    if (!isWebRTCSupported()) {
+      Alert.alert(
+        'WebRTC not available',
+        'Free STUN calls work on web browsers in this build. Native Expo requires react-native-webrtc with a development build.'
+      );
+      return;
+    }
 
     callStatusUnsub.current?.();
     if (ringingTimer.current) clearTimeout(ringingTimer.current);
@@ -140,6 +148,8 @@ export default function CallsScreen() {
       });
 
       setActiveCallId(callRef.id);
+      await startOutgoingWebRTCCall(callRef, type);
+
       await sendPushNotificationAsync(
         target.pushToken,
         `${userProfile?.displayName || user.displayName || 'Someone'} is calling`,
@@ -163,8 +173,7 @@ export default function CallsScreen() {
         }
       });
     } catch (error: any) {
-      setCallState(null);
-      setCallType(null);
+      finishLocalCall(true);
       Alert.alert('Call failed', error?.message || 'Could not start the call.');
       return;
     }
@@ -175,6 +184,7 @@ export default function CallsScreen() {
   };
 
   const finishLocalCall = (missed: boolean) => {
+    endActiveWebRTCCall();
     if (callState === 'connected' || callState === 'ringing' || callState === 'calling') {
       const durationStr = callSeconds > 0 ? formatCallDuration(callSeconds) : '';
       const newLog = {
@@ -202,6 +212,7 @@ export default function CallsScreen() {
   };
 
   const endCall = async () => {
+    endActiveWebRTCCall();
     callStatusUnsub.current?.();
     callStatusUnsub.current = null;
 

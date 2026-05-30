@@ -20,6 +20,11 @@ interface ChatListItemProps {
   isRead?: boolean;
   onPress: () => void;
   onRemove?: (id: string) => void;
+  onMute?: (id: string) => void;
+  onMarkRead?: (id: string) => void;
+  onArchive?: (id: string) => void;
+  isMuted?: boolean;
+  isArchived?: boolean;
 }
 
 interface ContextMenuItem {
@@ -42,6 +47,11 @@ export function ChatListItem({
   isRead = false,
   onPress,
   onRemove,
+  onMute,
+  onMarkRead,
+  onArchive,
+  isMuted = false,
+  isArchived = false,
 }: ChatListItemProps) {
   const { theme } = useTheme();
   const [menuVisible, setMenuVisible] = useState(false);
@@ -92,19 +102,19 @@ export function ChatListItem({
       onPress: () => closeMenu(onPress),
     },
     {
-      icon: 'notifications-off-outline',
-      label: 'Mute Notifications',
-      onPress: () => closeMenu(),
+      icon: isMuted ? 'notifications-outline' : 'notifications-off-outline',
+      label: isMuted ? 'Unmute Notifications' : 'Mute Notifications',
+      onPress: () => closeMenu(() => onMute?.(id)),
     },
     {
       icon: 'checkmark-done-outline',
       label: 'Mark as Read',
-      onPress: () => closeMenu(),
+      onPress: () => closeMenu(() => onMarkRead?.(id)),
     },
     {
-      icon: 'archive-outline',
-      label: 'Archive Chat',
-      onPress: () => closeMenu(),
+      icon: isArchived ? 'unarchive-outline' : 'archive-outline',
+      label: isArchived ? 'Unarchive Chat' : 'Archive Chat',
+      onPress: () => closeMenu(() => onArchive?.(id)),
     },
     {
       icon: 'person-remove-outline',
@@ -148,14 +158,19 @@ export function ChatListItem({
             >
               {name}
             </Text>
-            <Text
-              style={[
-                styles.time,
-                { color: unreadCount > 0 ? theme.primary : theme.textTertiary },
-              ]}
-            >
-              {time}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {isMuted && (
+                <Ionicons name="notifications-off-outline" size={14} color={theme.textTertiary} />
+              )}
+              <Text
+                style={[
+                  styles.time,
+                  { color: unreadCount > 0 ? theme.primary : theme.textTertiary },
+                ]}
+              >
+                {time}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.bottomRow}>

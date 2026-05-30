@@ -44,15 +44,26 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  useWindowDimensions
 } from "react-native";
 
 const REACTIONS = ["❤️", "😂", "😮", "😢", "👍", "🔥"];
 
-export default function ChatScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) {
+  const { id: paramId } = useLocalSearchParams<{ id: string }>();
+  const id = propChatId || paramId;
   const { theme } = useTheme();
   const { user, userProfile } = useAuth();
+  
+  const { width } = useWindowDimensions();
+  const isWide = width >= 768;
+
+  useEffect(() => {
+    if (isWide && !propChatId) {
+      router.replace('/(tabs)' as any);
+    }
+  }, [isWide, propChatId]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
@@ -365,11 +376,13 @@ export default function ChatScreen() {
           ? "📷 Photo"
           : "🎥 Video";
           
-      if (!isGroupChat && otherUser?.pushToken) {
+      const isOtherUserMuted = chatInfo?.mutedBy?.includes(otherUser?.uid || "");
+      if (!isGroupChat && otherUser?.pushToken && !isOtherUserMuted) {
         sendPushNotificationAsync(otherUser.pushToken, senderName, notifText, { url: `/chat/${id}` });
       } else if (isGroupChat && groupMembers) {
         groupMembers.forEach((member) => {
-          if (member.uid !== user.uid && member.pushToken) {
+          const isMemberMuted = chatInfo?.mutedBy?.includes(member.uid);
+          if (member.uid !== user.uid && member.pushToken && !isMemberMuted) {
             sendPushNotificationAsync(member.pushToken, chatInfo?.groupName || "Group Chat", `${senderName}: ${notifText}`, { url: `/chat/${id}` });
           }
         });
@@ -668,11 +681,13 @@ export default function ChatScreen() {
 
       // Send Push Notification
       const senderName = userProfile?.displayName || user.displayName || "Someone";
-      if (!isGroupChat && otherUser?.pushToken) {
+      const isOtherUserMuted = chatInfo?.mutedBy?.includes(otherUser?.uid || "");
+      if (!isGroupChat && otherUser?.pushToken && !isOtherUserMuted) {
         sendPushNotificationAsync(otherUser.pushToken, senderName, text, { url: `/chat/${id}` });
       } else if (isGroupChat && groupMembers) {
         groupMembers.forEach((member) => {
-          if (member.uid !== user.uid && member.pushToken) {
+          const isMemberMuted = chatInfo?.mutedBy?.includes(member.uid);
+          if (member.uid !== user.uid && member.pushToken && !isMemberMuted) {
             sendPushNotificationAsync(member.pushToken, chatInfo?.groupName || "Group Chat", `${senderName}: ${text}`, { url: `/chat/${id}` });
           }
         });
@@ -1306,67 +1321,83 @@ export default function ChatScreen() {
             </Text>
           </View>
         ) : (
-          /* Input Bar */
-          <View
-            style={[
-              styles.inputBar,
-              { backgroundColor: theme.surface, borderTopColor: theme.border },
-            ]}
-          >
-            <TouchableOpacity
-              onPress={() => setAttachmentModalVisible(true)}
-              style={[styles.inputAction, { backgroundColor: theme.inputBg }]}
-            >
-              <Ionicons name="attach" size={20} color={theme.textSecondary} />
-            </TouchableOpacity>
-
-            <View style={[styles.inputWrap, { backgroundColor: theme.inputBg }]}>
-              <TextInput
-                ref={inputRef}
-                value={inputText}
-                onChangeText={handleTyping}
-                placeholder="Type a message..."
-                placeholderTextColor={theme.textTertiary}
-                multiline
-                maxLength={2000}
-                style={[styles.input, { color: theme.text }]}
-                returnKeyType="default"
-              />
-              <TouchableOpacity
-                style={styles.emojiBtn}
-                onPress={() => setEmojiPickerVisible(true)}
-              >
-                <Ionicons
-                  name="happy-outline"
-                  size={20}
-                  color={theme.textTertiary}
-                />
-              </TouchableOpacity>
+          <>
+            {/* Quick Emoji Bar */}
+            <View style={[styles.quickEmojiBar, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
+              {["❤️", "😂", "🔥", "👍", "🙌", "😍", "🎉", "✨"].map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  onPress={() => handleEmojiSelect(emoji)}
+                  style={styles.quickEmojiItem}
+                  activeOpacity={0.65}
+                >
+                  <Text style={styles.quickEmojiText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
-            <TouchableOpacity
-              onPress={sendMessage}
-              disabled={!inputText.trim() || sending}
-              activeOpacity={0.85}
+            {/* Input Bar */}
+            <View
+              style={[
+                styles.inputBar,
+                { backgroundColor: theme.surface, borderTopColor: theme.border },
+              ]}
             >
-              <LinearGradient
-                colors={
-                  inputText.trim()
-                    ? [theme.primary, theme.secondary]
-                    : [theme.surfaceElevated, theme.surfaceElevated]
-                }
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.sendBtn}
+              <TouchableOpacity
+                onPress={() => setAttachmentModalVisible(true)}
+                style={[styles.inputAction, { backgroundColor: theme.inputBg }]}
               >
-                <Ionicons
-                  name="send"
-                  size={18}
-                  color={inputText.trim() ? "#fff" : theme.textTertiary}
+                <Ionicons name="attach" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
+
+              <View style={[styles.inputWrap, { backgroundColor: theme.inputBg }]}>
+                <TextInput
+                  ref={inputRef}
+                  value={inputText}
+                  onChangeText={handleTyping}
+                  placeholder="Type a message..."
+                  placeholderTextColor={theme.textTertiary}
+                  multiline
+                  maxLength={2000}
+                  style={[styles.input, { color: theme.text }]}
+                  returnKeyType="default"
                 />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+                <TouchableOpacity
+                  style={styles.emojiBtn}
+                  onPress={() => setEmojiPickerVisible(true)}
+                >
+                  <Ionicons
+                    name="happy-outline"
+                    size={20}
+                    color={theme.textTertiary}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                onPress={sendMessage}
+                disabled={!inputText.trim() || sending}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={
+                    inputText.trim()
+                      ? [theme.primary, theme.secondary]
+                      : [theme.surfaceElevated, theme.surfaceElevated]
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.sendBtn}
+                >
+                  <Ionicons
+                    name="send"
+                    size={18}
+                    color={inputText.trim() ? "#fff" : theme.textTertiary}
+                  />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </KeyboardAvoidingView>
 
@@ -2876,5 +2907,21 @@ const styles = StyleSheet.create({
   emojiSheetCloseText: {
     fontSize: 14,
     fontWeight: "700",
+  },
+  quickEmojiBar: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 8,
+  },
+  quickEmojiItem: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  quickEmojiText: {
+    fontSize: 20,
   },
 });
