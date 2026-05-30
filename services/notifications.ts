@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Platform } from 'react-native';
-import { db, auth } from './firebase';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from './firebase';
 
 // We'll use lazy-loading for expo-notifications to avoid crashes in Expo Go
 let Notifications: any = null;
@@ -72,33 +72,33 @@ export async function registerForPushNotificationsAsync() {
     // Get permissions
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
-    
+
     if (existingStatus !== 'granted') {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
-    
+
     if (finalStatus !== 'granted') {
       console.log('Push notification permission not granted');
       return null;
     }
-    
+
     // Get the token
-    const projectId = 
-      Constants?.expoConfig?.extra?.eas?.projectId ?? 
+    const projectId =
+      Constants?.expoConfig?.extra?.eas?.projectId ??
       Constants?.easConfig?.projectId ??
       '0ee488fc-fb14-426f-a7cb-43b611a33a36';
 
     token = (await Notifications.getExpoPushTokenAsync({
       projectId,
     })).data;
-    
+
     console.log('Expo Push Token retrieved');
 
     if (token) {
       await saveTokenToFirestore(token);
     }
-    
+
     return token;
   } catch (e) {
     console.error('Error in registerForPushNotificationsAsync:', e);
@@ -111,7 +111,10 @@ export async function registerForPushNotificationsAsync() {
  */
 export async function saveTokenToFirestore(token: string) {
   const user = auth.currentUser;
-  if (!user || !token) return;
+  if (!user || !token) {
+    console.log('Skipping push token save: no authenticated user or token.');
+    return;
+  }
 
   try {
     const userRef = doc(db, 'users', user.uid);
@@ -119,7 +122,7 @@ export async function saveTokenToFirestore(token: string) {
       pushToken: token,
       lastTokenUpdate: serverTimestamp(),
     });
-    
+
     console.log('Push token saved to Firestore');
   } catch (error) {
     console.error('Error saving token to Firestore:', error);
@@ -131,7 +134,7 @@ export async function saveTokenToFirestore(token: string) {
  */
 export async function sendLocalNotification(title: string, body: string, data?: any) {
   if (isWeb) return;
-  
+
   try {
     if (!Notifications) {
       Notifications = require('expo-notifications');
@@ -187,13 +190,13 @@ export async function sendPushNotificationAsync(to: string | null | undefined, t
  * Notification listeners helpers
  */
 export function addNotificationReceivedListener(callback: (notification: any) => void) {
-  if (isWeb) return { remove: () => {} };
+  if (isWeb) return { remove: () => { } };
   if (!Notifications) Notifications = require('expo-notifications');
   return Notifications.addNotificationReceivedListener(callback);
 }
 
 export function addNotificationResponseReceivedListener(callback: (response: any) => void) {
-  if (isWeb) return { remove: () => {} };
+  if (isWeb) return { remove: () => { } };
   if (!Notifications) Notifications = require('expo-notifications');
   return Notifications.addNotificationResponseReceivedListener(callback);
 }

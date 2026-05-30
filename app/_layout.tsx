@@ -1,24 +1,23 @@
-import React, { useEffect, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, Animated, Modal, TouchableOpacity, Text, StyleSheet, Alert, Platform } from 'react-native';
-import 'react-native-reanimated';
 import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useRef } from 'react';
+import { Alert, Animated, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import 'react-native-reanimated';
 
+import { GradientAvatar } from '@/components/ui/GradientAvatar';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ThemeProvider as AppThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { db } from '@/services/firebase';
-import { GradientAvatar } from '@/components/ui/GradientAvatar';
-import { acceptIncomingWebRTCCall, endActiveWebRTCCall, isWebRTCSupported } from '@/services/webrtcCalls';
 import {
   addNotificationReceivedListener,
   addNotificationResponseReceivedListener,
   removeNotificationSubscription,
-  registerForPushNotificationsAsync,
 } from '@/services/notifications';
+import { acceptIncomingWebRTCCall, endActiveWebRTCCall, isWebRTCSupported } from '@/services/webrtcCalls';
 
 interface IncomingCall {
   id: string;
@@ -355,13 +354,6 @@ function RootContent() {
   const { theme, mode } = useTheme();
   const [isAppReady, setIsAppReady] = React.useState(false);
 
-  // ─── Push notification token registration ──────────────────────────────
-  useEffect(() => {
-    if (user) {
-      registerForPushNotificationsAsync().catch(console.warn);
-    }
-  }, [user]);
-
   // ─── Notification tap → navigate to chat ───────────────────────────────
   useEffect(() => {
     const responseSub = addNotificationResponseReceivedListener((response: any) => {
@@ -375,7 +367,7 @@ function RootContent() {
 
   useEffect(() => {
     let active = true;
-    
+
     // Set a guaranteed 2 second minimum loading preloader
     const timer = setTimeout(() => {
       if (active && !loading) {
