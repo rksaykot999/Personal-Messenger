@@ -15,7 +15,10 @@
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
-      "package": "com.rksaykot999.PersonalMessenger"
+      "package": "com.rksaykot999.PersonalMessenger",
+      "gradleArgs": [
+        "-Dorg.gradle.java.home=C:/Program Files/Java/jdk-17"
+      ]
     },
     "web": {
       "output": "static",
