@@ -73,18 +73,35 @@ async function createPeerConnection(
   remoteAudio.autoplay = true;
   remoteAudio.controls = false;
   remoteAudio.muted = false;
+  remoteAudio.volume = 1.0;
   (remoteAudio as any).playsInline = true;
   remoteAudio.setAttribute('playsinline', '');
   remoteAudio.style.display = 'none';
+  remoteAudio.style.visibility = 'hidden';
   document.body.appendChild(remoteAudio);
 
   pc.ontrack = (event) => {
     console.log('Remote track received:', event.track.kind);
     if (event.streams && event.streams.length > 0) {
       remoteAudio.srcObject = event.streams[0];
-      remoteAudio.play().catch((error) => {
-        console.error('Failed to play remote audio:', error);
-      });
+      
+      const playPromise = remoteAudio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log('Remote audio playing successfully');
+          })
+          .catch((error) => {
+            console.error('Failed to play remote audio:', error);
+            // Try with user gesture if needed
+            if (error.name === 'NotAllowedError') {
+              console.warn('Autoplay policy blocked. Attempting delayed play...');
+              setTimeout(() => {
+                remoteAudio.play().catch((e) => console.error('Delayed play failed:', e));
+              }, 1000);
+            }
+          });
+      }
     }
   };
 

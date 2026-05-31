@@ -35,7 +35,14 @@ function IncomingCallListener() {
   const [incomingCall, setIncomingCall] = React.useState<IncomingCall | null>(null);
   const [connectedCall, setConnectedCall] = React.useState<IncomingCall | null>(null);
   const [callStartTime, setCallStartTime] = React.useState<number | null>(null);
+  const [callDuration, setCallDuration] = React.useState(0);
   const callTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const formatCallDuration = (sec: number): string => {
+    const mins = Math.floor(sec / 60);
+    const secs = sec % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   useEffect(() => {
     if (!user) {
@@ -75,7 +82,23 @@ function IncomingCallListener() {
     });
 
     return unsubscribe;
-  }, [connectedCall, user, callStartTime]);
+  }, [connectedCall, user]);
+
+  // Timer for connected calls
+  useEffect(() => {
+    if (!connectedCall || !callStartTime) return;
+
+    callTimerRef.current = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+
+    return () => {
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+        callTimerRef.current = null;
+      }
+    };
+  }, [connectedCall, callStartTime]);
 
   const updateCallStatus = async (call: IncomingCall, status: IncomingCall['status']) => {
     await updateDoc(doc(db, 'calls', call.id), {
@@ -90,7 +113,6 @@ function IncomingCallListener() {
     if (!connectedCall || !user) return;
 
     try {
-      const duration = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
       await addDoc(collection(db, 'users', user.uid, 'callHistory'), {
         callId: connectedCall.id,
         callerId: connectedCall.callerId,
@@ -98,7 +120,7 @@ function IncomingCallListener() {
         callerPhotoURL: connectedCall.callerPhotoURL,
         callType: 'incoming',
         callStatus: status,
-        duration: duration,
+        duration: callDuration,
         createdAt: serverTimestamp(),
       });
     } catch (error) {
@@ -107,6 +129,7 @@ function IncomingCallListener() {
 
     setConnectedCall(null);
     setCallStartTime(null);
+    setCallDuration(0);
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
       callTimerRef.current = null;
@@ -169,6 +192,7 @@ function IncomingCallListener() {
           </View>
           <Text style={styles.callName}>{activeCall.callerName || 'Friend'}</Text>
           <Text style={styles.callStatus}>{incomingCall ? 'Incoming call...' : 'Connected'}</Text>
+          {connectedCall && <Text style={[styles.callDuration, { color: theme.accent }]}>{formatCallDuration(callDuration)}</Text>}
         </View>
 
         {incomingCall ? (
@@ -570,6 +594,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.65)',
     fontSize: 16,
     fontWeight: '600',
+  },
+  callDuration: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 4,
   },
   callActions: {
     flexDirection: 'row',
