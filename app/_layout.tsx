@@ -5,7 +5,7 @@ import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useRef } from 'react';
-import { Alert, Animated, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -16,7 +16,6 @@ import {
   addNotificationResponseReceivedListener,
   removeNotificationSubscription,
 } from '@/services/notifications';
-import { endActiveWebRTCCall } from '@/services/webrtcCalls';
 
 interface IncomingCall {
   id: string;
@@ -326,6 +325,7 @@ function RootContent() {
   return (
     <ThemeProvider value={mode === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+        <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
