@@ -185,7 +185,7 @@ export default function CallScreen() {
     let isCancelled = false;
 
     const initWebRTC = async () => {
-      // Stream update callback register করা
+      // Stream update callback register
       setOnStreamsUpdate((local, remote) => {
         if (isCancelled) return;
         setLocalStream(local);
@@ -194,36 +194,30 @@ export default function CallScreen() {
 
       if (!isWebRTCSupported()) {
         Alert.alert(
-          'WebRTC সমর্থিত নয়',
+          'WebRTC Not Supported',
           Platform.OS === 'web'
-            ? 'আপনার ব্রাউজার WebRTC সমর্থন করে না।'
-            : 'WebRTC চালাতে Development Build দরকার (Expo Go তে কাজ করে না)।',
-          [{ text: 'ঠিক আছে', onPress: () => endCall('ended') }],
+            ? 'Your browser does not support WebRTC.'
+            : 'WebRTC requires a Development Build (Does not work in Expo Go).',
+          [{ text: 'OK', onPress: () => endCall('ended') }],
         );
         return;
       }
 
       try {
         if (role === 'caller') {
-          // Caller: offer তৈরি করা
+          // Caller: Create offer
           const callRef = doc(db, 'calls', id);
           await startOutgoingWebRTCCall(callRef, type as 'voice' | 'video');
           if (!isCancelled) setCallStatus('ringing');
-        } else {
-          // Receiver: answer দেওয়া
-          await acceptIncomingWebRTCCall(id, type as 'voice' | 'video');
-          if (!isCancelled) {
-            setCallStatus('connected');
-            await updateCallStatus('accepted', { acceptedAt: serverTimestamp() });
-          }
         }
+        // For receiver, we wait for the user to press Accept
       } catch (err: any) {
         console.error('[CallScreen] WebRTC init error:', err);
         if (!isCancelled) {
           Alert.alert(
             'Call Error',
-            err?.message || 'Call শুরু করতে সমস্যা হয়েছে।',
-            [{ text: 'ঠিক আছে', onPress: () => endCall('ended') }],
+            err?.message || 'Failed to start the call.',
+            [{ text: 'OK', onPress: () => endCall('ended') }],
           );
         }
       }
@@ -254,6 +248,20 @@ export default function CallScreen() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, type, role]);
+
+  // ─── Accept Call ─────────────────────────────────────────
+  const handleAcceptCall = async () => {
+    try {
+      setCallStatus('connecting');
+      await acceptIncomingWebRTCCall(id, type as 'voice' | 'video');
+      setCallStatus('connected');
+      await updateCallStatus('accepted', { acceptedAt: serverTimestamp() });
+    } catch (err: any) {
+      console.error('[CallScreen] Accept error:', err);
+      Alert.alert('Error', 'Failed to accept the call.', [{ text: 'OK' }]);
+      endCall('ended');
+    }
+  };
 
   // ─── Timer শুরু করা (connected হলে) ──────────────────────
   useEffect(() => {
@@ -310,10 +318,10 @@ export default function CallScreen() {
   // ─── Status Text ─────────────────────────────────────────
   const statusText = () => {
     switch (callStatus) {
-      case 'connecting': return 'সংযোগ হচ্ছে...';
-      case 'ringing': return role === 'caller' ? 'রিং হচ্ছে...' : 'Incoming call...';
+      case 'connecting': return 'Connecting...';
+      case 'ringing': return role === 'caller' ? 'Ringing...' : 'Incoming call...';
       case 'connected': return formatDuration(duration);
-      case 'ended': return 'কল শেষ হয়েছে';
+      case 'ended': return 'Call ended';
     }
   };
 
@@ -411,81 +419,116 @@ export default function CallScreen() {
 
       {/* ─── Control Buttons ─── */}
       <View style={styles.controls}>
-        {/* Row 1 — Mute, Speaker/Camera, Flip */}
-        <View style={styles.controlRow}>
-          {/* Mute */}
-          <TouchableOpacity
-            style={[styles.controlBtn, isMuted && styles.controlBtnActive]}
-            onPress={handleMuteToggle}
-          >
-            <Ionicons
-              name={isMuted ? 'mic-off' : 'mic'}
-              size={26}
-              color="#fff"
-            />
-            <Text style={styles.controlLabel}>
-              {isMuted ? 'Unmute' : 'Mute'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Speaker (voice) / Camera toggle (video) */}
-          {isVideo ? (
+        {role === 'receiver' && callStatus === 'ringing' ? (
+          /* Incoming Call Actions */
+          <View style={[styles.endCallRow, { justifyContent: 'space-around', width: '100%' }]}>
             <TouchableOpacity
-              style={[styles.controlBtn, !isCameraOn && styles.controlBtnActive]}
-              onPress={handleCameraToggle}
+              style={styles.endCallBtn}
+              onPress={() => endCall('declined')}
+              activeOpacity={0.8}
             >
-              <Ionicons
-                name={isCameraOn ? 'videocam' : 'videocam-off'}
-                size={26}
-                color="#fff"
-              />
-              <Text style={styles.controlLabel}>
-                {isCameraOn ? 'Camera' : 'Camera Off'}
-              </Text>
+              <LinearGradient
+                colors={['#FF1744', '#D50000']}
+                style={styles.endCallGradient}
+              >
+                <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+              </LinearGradient>
+              <Text style={[styles.controlLabel, { marginTop: 8, textAlign: 'center' }]}>Decline</Text>
             </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.controlBtn, isSpeakerOn && styles.controlBtnActive]}
-              onPress={() => setIsSpeakerOn((p) => !p)}
-            >
-              <Ionicons
-                name={isSpeakerOn ? 'volume-high' : 'volume-medium'}
-                size={26}
-                color="#fff"
-              />
-              <Text style={styles.controlLabel}>Speaker</Text>
-            </TouchableOpacity>
-          )}
 
-          {/* Flip Camera (video only) */}
-          {isVideo && Platform.OS !== 'web' ? (
             <TouchableOpacity
-              style={styles.controlBtn}
-              onPress={handleFlipCamera}
+              style={styles.endCallBtn}
+              onPress={handleAcceptCall}
+              activeOpacity={0.8}
             >
-              <Ionicons name="camera-reverse" size={26} color="#fff" />
-              <Text style={styles.controlLabel}>Flip</Text>
+              <LinearGradient
+                colors={['#00C853', '#00E676']}
+                style={styles.endCallGradient}
+              >
+                <Ionicons name="call" size={32} color="#fff" />
+              </LinearGradient>
+              <Text style={[styles.controlLabel, { marginTop: 8, textAlign: 'center' }]}>Accept</Text>
             </TouchableOpacity>
-          ) : (
-            <View style={styles.controlBtn} />
-          )}
-        </View>
+          </View>
+        ) : (
+          /* Ongoing/Outgoing Call Actions */
+          <>
+            <View style={styles.controlRow}>
+              {/* Mute */}
+              <TouchableOpacity
+                style={[styles.controlBtn, isMuted && styles.controlBtnActive]}
+                onPress={handleMuteToggle}
+              >
+                <Ionicons
+                  name={isMuted ? 'mic-off' : 'mic'}
+                  size={26}
+                  color="#fff"
+                />
+                <Text style={styles.controlLabel}>
+                  {isMuted ? 'Unmute' : 'Mute'}
+                </Text>
+              </TouchableOpacity>
 
-        {/* Row 2 — End Call (লাল বোতাম) */}
-        <View style={styles.endCallRow}>
-          <TouchableOpacity
-            style={styles.endCallBtn}
-            onPress={() => endCall('ended')}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['#FF1744', '#D50000']}
-              style={styles.endCallGradient}
-            >
-              <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+              {/* Speaker / Camera toggle */}
+              {isVideo ? (
+                <TouchableOpacity
+                  style={[styles.controlBtn, !isCameraOn && styles.controlBtnActive]}
+                  onPress={handleCameraToggle}
+                >
+                  <Ionicons
+                    name={isCameraOn ? 'videocam' : 'videocam-off'}
+                    size={26}
+                    color="#fff"
+                  />
+                  <Text style={styles.controlLabel}>
+                    {isCameraOn ? 'Camera' : 'Camera Off'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.controlBtn, isSpeakerOn && styles.controlBtnActive]}
+                  onPress={() => setIsSpeakerOn((p) => !p)}
+                >
+                  <Ionicons
+                    name={isSpeakerOn ? 'volume-high' : 'volume-medium'}
+                    size={26}
+                    color="#fff"
+                  />
+                  <Text style={styles.controlLabel}>Speaker</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Flip Camera */}
+              {isVideo && Platform.OS !== 'web' ? (
+                <TouchableOpacity
+                  style={styles.controlBtn}
+                  onPress={handleFlipCamera}
+                >
+                  <Ionicons name="camera-reverse" size={26} color="#fff" />
+                  <Text style={styles.controlLabel}>Flip</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.controlBtn} />
+              )}
+            </View>
+
+            {/* End Call */}
+            <View style={styles.endCallRow}>
+              <TouchableOpacity
+                style={styles.endCallBtn}
+                onPress={() => endCall('ended')}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#FF1744', '#D50000']}
+                  style={styles.endCallGradient}
+                >
+                  <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
     </View>
   );

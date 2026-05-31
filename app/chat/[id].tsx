@@ -495,10 +495,10 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
     }
     if (!isWebRTCSupported()) {
       Alert.alert(
-        "WebRTC সমর্থিত নয়",
+        "WebRTC Not Supported",
         Platform.OS === 'web'
-          ? "আপনার ব্রাউজার WebRTC সমর্থন করে না।"
-          : "WebRTC call এর জন্য Development Build দরকার (Expo Go তে কাজ করে না)।\n\nCommend: npx expo run:android",
+          ? "Your browser does not support WebRTC."
+          : "WebRTC call requires a Development Build (Does not work in Expo Go).\n\nCommand: npx expo run:android",
       );
       return;
     }
@@ -535,7 +535,7 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
         `/call/${callRef.id}?role=caller&type=${type}&name=${receiverName}&photo=${receiverPhoto}` as any
       );
     } catch (error: any) {
-      Alert.alert("Call failed", error?.message || "Call শুরু করতে সমস্যা হয়েছে।");
+      Alert.alert("Call failed", error?.message || "Failed to start the call.");
     }
   };
 

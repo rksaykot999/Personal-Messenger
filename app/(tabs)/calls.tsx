@@ -403,7 +403,7 @@ export default function CallsScreen() {
               <GradientAvatar name={item.name} photoURL={item.photoURL} size={50} />
               <View style={styles.callInfo}>
                 <Text style={[styles.callName, { color: item.missed ? theme.error : theme.text }]}>
-                  {item.name}
+                  {item.name || 'Unknown'}
                 </Text>
                 <View style={styles.callMeta}>
                   <Ionicons

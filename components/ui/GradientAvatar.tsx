@@ -23,14 +23,17 @@ const GRADIENT_SETS = [
 ];
 
 function getGradient(name: string) {
-  const index = name.charCodeAt(0) % GRADIENT_SETS.length;
+  const safeName = name || '?';
+  const index = safeName.charCodeAt(0) % GRADIENT_SETS.length;
   return GRADIENT_SETS[index] as [string, string];
 }
 
 export function GradientAvatar({ name, size = 48, photoURL, isOnline = false, showStatus = false }: GradientAvatarProps) {
   const { theme } = useTheme();
-  const initials = name
+  const safeName = name || '?';
+  const initials = safeName
     .split(' ')
+    .filter(Boolean)
     .map((n) => n[0])
     .join('')
     .toUpperCase()
@@ -38,7 +41,7 @@ export function GradientAvatar({ name, size = 48, photoURL, isOnline = false, sh
 
   const fontSize = size * 0.38;
   const statusSize = size * 0.28;
-  const gradients = getGradient(name);
+  const gradients = getGradient(safeName);
 
   return (
     <View style={{ width: size, height: size }}>
