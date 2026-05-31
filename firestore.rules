@@ -11,6 +11,12 @@ service cloud.firestore {
     match /users/{userId} {
       // ডিসকভার লিস্ট, ফ্রেন্ড সিস্টেম, এবং সিঙ্ক ঠিক রাখতে লগইন করা যেকোনো ইউজারকে রিড/রাইট পারমিশন দেওয়া হলো
       allow read, write: if isAuthenticated();
+
+      // --- Call History Subcollection ---
+      match /callHistory/{callHistoryId} {
+        // শুধুমাত্র নিজের কল হিস্টরি পড়া এবং লেখার অনুমতি
+        allow read, create, delete: if isAuthenticated() && request.auth.uid == userId;
+      }
     }
 
     // --- Friend Requests Collection ---
