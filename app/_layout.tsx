@@ -34,6 +34,8 @@ function IncomingCallListener() {
   const { theme } = useTheme();
   const [incomingCall, setIncomingCall] = React.useState<IncomingCall | null>(null);
   const [connectedCall, setConnectedCall] = React.useState<IncomingCall | null>(null);
+  const [callStartTime, setCallStartTime] = React.useState<number | null>(null);
+  const callTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -68,12 +70,12 @@ function IncomingCallListener() {
       const call = snapshot.data();
       if (!call || call.status === 'ended' || call.status === 'declined' || call.status === 'missed') {
         endActiveWebRTCCall();
-        setConnectedCall(null);
+        saveCallHistoryAndCleanup('ended');
       }
     });
 
     return unsubscribe;
-  }, [connectedCall]);
+  }, [connectedCall, user, callStartTime]);
 
   const updateCallStatus = async (call: IncomingCall, status: IncomingCall['status']) => {
     await updateDoc(doc(db, 'calls', call.id), {
@@ -82,6 +84,33 @@ function IncomingCallListener() {
       ...(status === 'accepted' ? { acceptedAt: serverTimestamp() } : {}),
       ...(status === 'ended' ? { endedAt: serverTimestamp() } : {}),
     });
+  };
+
+  const saveCallHistoryAndCleanup = async (status: string) => {
+    if (!connectedCall || !user) return;
+
+    try {
+      const duration = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
+      await addDoc(collection(db, 'users', user.uid, 'callHistory'), {
+        callId: connectedCall.id,
+        callerId: connectedCall.callerId,
+        callerName: connectedCall.callerName,
+        callerPhotoURL: connectedCall.callerPhotoURL,
+        callType: 'incoming',
+        callStatus: status,
+        duration: duration,
+        createdAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.warn('Could not save incoming call history:', error);
+    }
+
+    setConnectedCall(null);
+    setCallStartTime(null);
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
   };
 
   const acceptCall = async () => {
@@ -101,6 +130,7 @@ function IncomingCallListener() {
     try {
       await acceptIncomingWebRTCCall(call.id, call.type);
       setConnectedCall(call);
+      setCallStartTime(Date.now());
     } catch (error: any) {
       Alert.alert('Call failed', error?.message || 'Could not answer this call.');
       await updateCallStatus(call, 'declined');
@@ -118,8 +148,8 @@ function IncomingCallListener() {
     if (!connectedCall) return;
     const call = connectedCall;
     endActiveWebRTCCall();
-    setConnectedCall(null);
     await updateCallStatus(call, 'ended');
+    await saveCallHistoryAndCleanup('ended');
   };
 
   const activeCall = incomingCall || connectedCall;

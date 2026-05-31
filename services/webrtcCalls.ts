@@ -69,17 +69,21 @@ async function createPeerConnection(
   localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
   const remoteAudio = document.createElement('audio');
+  remoteAudio.id = 'remote-audio-' + Date.now();
   remoteAudio.autoplay = true;
   remoteAudio.controls = false;
   remoteAudio.muted = false;
   (remoteAudio as any).playsInline = true;
+  remoteAudio.setAttribute('playsinline', '');
+  remoteAudio.style.display = 'none';
   document.body.appendChild(remoteAudio);
 
   pc.ontrack = (event) => {
+    console.log('Remote track received:', event.track.kind);
     if (event.streams && event.streams.length > 0) {
       remoteAudio.srcObject = event.streams[0];
       remoteAudio.play().catch((error) => {
-        console.warn('Failed to play remote audio:', error);
+        console.error('Failed to play remote audio:', error);
       });
     }
   };

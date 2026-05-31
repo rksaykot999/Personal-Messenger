@@ -1,17 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar,
-  Platform, Modal, Pressable, TextInput, Alert,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '@/contexts/ThemeContext';
 import { GradientAvatar } from '@/components/ui/GradientAvatar';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { db } from '@/services/firebase';
-import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { sendPushNotificationAsync } from '@/services/notifications';
-import { startOutgoingWebRTCCall, endActiveWebRTCCall, isWebRTCSupported } from '@/services/webrtcCalls';
+import { endActiveWebRTCCall, isWebRTCSupported, startOutgoingWebRTCCall } from '@/services/webrtcCalls';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, orderBy, serverTimestamp, updateDoc } from 'firebase/firestore';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Modal,
+  Platform,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 interface CallTarget {
   uid: string;
@@ -62,6 +71,13 @@ export default function CallsScreen() {
   const callStatusUnsub = useRef<(() => void) | null>(null);
   const ringingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Helper function to format call duration
+  const formatCallDuration = (sec: number): string => {
+    const mins = Math.floor(sec / 60);
+    const secs = sec % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Load friends when modal opens
   useEffect(() => {
     if (!user || !friendsModalVisible) return;
@@ -81,6 +97,41 @@ export default function CallsScreen() {
       setLoadingFriends(false);
     });
   }, [user, friendsModalVisible]);
+
+  // Load call history from Firestore
+  useEffect(() => {
+    if (!user) {
+      setCallHistory([]);
+      return;
+    }
+
+    const historyQuery = query(
+      collection(db, 'users', user.uid, 'callHistory'),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(historyQuery, (snapshot) => {
+      const history = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          receiverId: data.calleeId,
+          name: data.calleeName,
+          photoURL: data.calleePhotoURL,
+          pushToken: data.pushToken,
+          type: data.callType as 'incoming' | 'outgoing' | 'missed',
+          duration: data.duration > 0 ? formatCallDuration(data.duration) : '',
+          time: 'Just now',
+          missed: data.callStatus === 'missed',
+        };
+      });
+      setCallHistory(history);
+    }, (error) => {
+      console.warn('Error loading call history:', error);
+    });
+
+    return unsubscribe;
+  }, [user]);
 
   // Call duration counter
   useEffect(() => {
@@ -183,7 +234,7 @@ export default function CallsScreen() {
     }, 1500);
   };
 
-  const finishLocalCall = (missed: boolean) => {
+  const finishLocalCall = async (missed: boolean) => {
     endActiveWebRTCCall();
     if (callState === 'connected' || callState === 'ringing' || callState === 'calling') {
       const durationStr = callSeconds > 0 ? formatCallDuration(callSeconds) : '';
@@ -199,6 +250,24 @@ export default function CallsScreen() {
         missed,
       };
       setCallHistory((prev) => [newLog, ...prev]);
+
+      // Save to Firestore
+      if (user && activeCallId) {
+        try {
+          await addDoc(collection(db, 'users', user.uid, 'callHistory'), {
+            callId: activeCallId,
+            calleeId: currentCallTarget?.uid,
+            calleeName: currentCallName,
+            calleePhotoURL: currentCallPhotoURL,
+            callType: 'outgoing',
+            callStatus: missed ? 'missed' : 'completed',
+            duration: callSeconds,
+            createdAt: serverTimestamp(),
+          });
+        } catch (error) {
+          console.warn('Could not save call history to Firestore:', error);
+        }
+      }
     }
 
     callStatusUnsub.current?.();
@@ -229,12 +298,6 @@ export default function CallsScreen() {
     }
 
     finishLocalCall(callSeconds === 0 && callState !== 'connected');
-  };
-
-  const formatCallDuration = (sec: number): string => {
-    const mins = Math.floor(sec / 60);
-    const secs = sec % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getCallIcon = (type: string, missed: boolean) => {
@@ -511,7 +574,7 @@ export default function CallsScreen() {
                 />
               </View>
               <Text style={styles.callOverlayName}>{currentCallName || 'Friend'}</Text>
-              
+
               <Text style={styles.callStatusText}>
                 {callState === 'calling' && 'Calling...'}
                 {callState === 'ringing' && 'Ringing...'}
