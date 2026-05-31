@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { db } from '@/services/firebase';
 import {
   addDoc,
   collection,
@@ -8,7 +8,7 @@ import {
   onSnapshot,
   updateDoc,
 } from 'firebase/firestore';
-import { db } from '@/services/firebase';
+import { Platform } from 'react-native';
 
 const ICE_SERVERS = {
   iceServers: [
@@ -70,14 +70,18 @@ async function createPeerConnection(
 
   const remoteAudio = document.createElement('audio');
   remoteAudio.autoplay = true;
+  remoteAudio.controls = false;
+  remoteAudio.muted = false;
   (remoteAudio as any).playsInline = true;
   document.body.appendChild(remoteAudio);
 
-  const remoteStream = new MediaStream();
   pc.ontrack = (event) => {
-    event.streams[0]?.getTracks().forEach((track) => remoteStream.addTrack(track));
-    remoteAudio.srcObject = remoteStream;
-    remoteAudio.play().catch(() => {});
+    if (event.streams && event.streams.length > 0) {
+      remoteAudio.srcObject = event.streams[0];
+      remoteAudio.play().catch((error) => {
+        console.warn('Failed to play remote audio:', error);
+      });
+    }
   };
 
   pc.onicecandidate = async (event) => {
