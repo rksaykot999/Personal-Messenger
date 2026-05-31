@@ -50,6 +50,7 @@ import {
   TouchableOpacity,
   Vibration,
   View,
+  Animated,
 } from 'react-native';
 
 // react-native-webrtc শুধু native এ import করব
@@ -124,9 +125,33 @@ export default function CallScreen() {
   const [localStream, setLocalStream] = useState<any>(null);
   const [remoteStream, setRemoteStream] = useState<any>(null);
 
-  // ─── Refs ─────────────────────────────────────────────────
+  // ─── Refs & Animations ──────────────────────────────────────
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusUnsubRef = useRef<(() => void) | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Pulse animation for ringing
+  useEffect(() => {
+    if (callStatus === 'ringing') {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.25,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+    }
+  }, [callStatus]);
 
   const isVideo = type === 'video';
 
@@ -440,12 +465,22 @@ export default function CallScreen() {
       <View style={styles.callerInfo}>
         {/* Video call এ connected হলে avatar লুকানো */}
         {(!isVideo || callStatus !== 'connected' || !remoteStream) && (
-          <View style={styles.avatarRing}>
-            <GradientAvatar
-              name={name || 'Friend'}
-              photoURL={photo || null}
-              size={120}
-            />
+          <View style={styles.avatarContainer}>
+            {callStatus === 'ringing' && (
+              <Animated.View
+                style={[
+                  styles.pulseRing,
+                  { transform: [{ scale: pulseAnim }] },
+                ]}
+              />
+            )}
+            <View style={styles.avatarRing}>
+              <GradientAvatar
+                name={name || 'Friend'}
+                photoURL={photo || null}
+                size={120}
+              />
+            </View>
           </View>
         )}
 
@@ -537,8 +572,16 @@ export default function CallScreen() {
                 </TouchableOpacity>
               )}
 
-              {/* Flip Camera */}
-              {isVideo && Platform.OS !== 'web' ? (
+              {/* Switch to Video / Flip Camera */}
+              {!isVideo ? (
+                <TouchableOpacity
+                  style={styles.controlBtn}
+                  onPress={() => Alert.alert('Upgrade to Video', 'Switching to video call will be available in the next update.')}
+                >
+                  <Ionicons name="videocam" size={26} color="#fff" />
+                  <Text style={styles.controlLabel}>Video</Text>
+                </TouchableOpacity>
+              ) : Platform.OS !== 'web' ? (
                 <TouchableOpacity
                   style={styles.controlBtn}
                   onPress={handleFlipCamera}
@@ -610,15 +653,28 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 24,
   },
+  avatarContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(108, 99, 255, 0.45)',
+  },
   avatarRing: {
     padding: 6,
     borderRadius: 70,
     borderWidth: 2.5,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.25)',
     shadowColor: '#6C63FF',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
+    shadowOpacity: 0.8,
+    shadowRadius: 24,
+    elevation: 8,
   },
   callerName: {
     color: '#fff',
