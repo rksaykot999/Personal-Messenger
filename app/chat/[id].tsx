@@ -6,7 +6,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { db } from "@/services/firebase";
 import { dismissAllNotifications, sendPushNotificationAsync } from "@/services/notifications";
 import { uploadToSupabaseRest } from "@/services/supabase";
-import { endActiveWebRTCCall, isWebRTCSupported, startOutgoingWebRTCCall } from "@/services/webrtcCalls";
+import { isWebRTCSupported } from "@/services/webrtcCalls";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -474,7 +474,7 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
   }, []);
 
   const finishLocalCall = () => {
-    endActiveWebRTCCall();
+    // Call screen handles WebRTC cleanup
     callStatusUnsub.current?.();
     callStatusUnsub.current = null;
     if (ringingTimer.current) clearTimeout(ringingTimer.current);
@@ -495,21 +495,16 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
     }
     if (!isWebRTCSupported()) {
       Alert.alert(
-        "WebRTC not available",
-        "Free STUN calls work on web browsers in this build. Native Expo requires react-native-webrtc with a development build.",
+        "WebRTC সমর্থিত নয়",
+        Platform.OS === 'web'
+          ? "আপনার ব্রাউজার WebRTC সমর্থন করে না।"
+          : "WebRTC call এর জন্য Development Build দরকার (Expo Go তে কাজ করে না)।\n\nCommend: npx expo run:android",
       );
       return;
     }
 
-    callStatusUnsub.current?.();
-    if (ringingTimer.current) clearTimeout(ringingTimer.current);
-    setCallType(type);
-    setCallState("calling");
-    setIsMuted(false);
-    setIsSpeakerOn(false);
-    setIsCameraOn(true);
-
     try {
+      // 1. Firestore এ call document তৈরি করা
       const callRef = await addDoc(collection(db, "calls"), {
         callerId: user.uid,
         callerName: userProfile?.displayName || user.displayName || "Someone",
@@ -523,44 +518,29 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
         updatedAt: serverTimestamp(),
       });
 
-      setActiveCallId(callRef.id);
-      await startOutgoingWebRTCCall(callRef, type);
+      // 2. Push notification পাঠানো
+      if (otherUser.pushToken) {
+        await sendPushNotificationAsync(
+          otherUser.pushToken,
+          `${userProfile?.displayName || user.displayName || "Someone"} is calling`,
+          `Incoming ${type} call`,
+          { type: "incoming-call", callId: callRef.id },
+        );
+      }
 
-      await sendPushNotificationAsync(
-        otherUser.pushToken,
-        `${userProfile?.displayName || user.displayName || "Someone"} is calling`,
-        `Incoming ${type} call`,
-        { type: "incoming-call", callId: callRef.id },
+      // 3. Call Screen এ navigate করা (caller role)
+      const receiverName = encodeURIComponent(otherUser.displayName || 'Friend');
+      const receiverPhoto = encodeURIComponent(otherUser.photoURL || '');
+      router.push(
+        `/call/${callRef.id}?role=caller&type=${type}&name=${receiverName}&photo=${receiverPhoto}` as any
       );
-
-      callStatusUnsub.current = onSnapshot(callRef, (snapshot) => {
-        const call = snapshot.data();
-        if (!call) return;
-
-        if (call.status === "accepted") {
-          setCallState("connected");
-        }
-
-        if (call.status === "declined" || call.status === "ended" || call.status === "missed") {
-          if (call.status === "declined") {
-            Alert.alert("Call declined", `${otherUser.displayName || "Friend"} declined the call.`);
-          }
-          finishLocalCall();
-        }
-      });
     } catch (error: any) {
-      finishLocalCall();
-      Alert.alert("Call failed", error?.message || "Could not start the call.");
-      return;
+      Alert.alert("Call failed", error?.message || "Call শুরু করতে সমস্যা হয়েছে।");
     }
-
-    ringingTimer.current = setTimeout(() => {
-      setCallState("ringing");
-    }, 1500);
   };
 
   const endCall = async () => {
-    endActiveWebRTCCall();
+    // Call screen handles WebRTC cleanup
     callStatusUnsub.current?.();
     callStatusUnsub.current = null;
 

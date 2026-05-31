@@ -1,3 +1,13 @@
+/**
+ * webrtcCalls.ts
+ * ─────────────────────────────────────────────────────────────
+ * Web ও Native (Android/iOS) উভয়ের জন্য WebRTC calling service।
+ * 
+ * Web এ     → Browser-native RTCPeerConnection ব্যবহার করে।
+ * Native এ  → react-native-webrtc ব্যবহার করে।
+ * ─────────────────────────────────────────────────────────────
+ */
+
 import { db } from '@/services/firebase';
 import {
   addDoc,
@@ -10,178 +20,350 @@ import {
 } from 'firebase/firestore';
 import { Platform } from 'react-native';
 
+// ─── STUN Servers (Google Free STUN) ─────────────────────────
 const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
   ],
 };
 
-type ActiveSession = {
-  pc: RTCPeerConnection;
-  localStream?: MediaStream;
-  remoteAudio?: HTMLAudioElement;
+// ─── Types ───────────────────────────────────────────────────
+export type CallType = 'voice' | 'video';
+
+export type ActiveSession = {
+  pc: any; // RTCPeerConnection (web or native)
+  localStream: any | null; // MediaStream
+  remoteStream: any | null; // MediaStream
+  remoteAudio?: HTMLAudioElement; // শুধু Web এ
   unsubscribes: Array<() => void>;
 };
 
+// ─── Global active session ───────────────────────────────────
 let activeSession: ActiveSession | null = null;
 
-export function isWebRTCSupported() {
-  return (
-    Platform.OS === 'web' &&
-    typeof window !== 'undefined' &&
-    typeof RTCPeerConnection !== 'undefined' &&
-    !!navigator.mediaDevices?.getUserMedia
-  );
+// ─── Exported stream references (UI এর জন্য) ─────────────────
+export let localMediaStream: any = null;
+export let remoteMediaStream: any = null;
+
+// ─── Stream update callback (CallScreen এ live update এর জন্য) ─
+let onStreamsUpdate: ((local: any, remote: any) => void) | null = null;
+
+export function setOnStreamsUpdate(cb: ((local: any, remote: any) => void) | null) {
+  onStreamsUpdate = cb;
 }
 
-function ensureWebRTC() {
-  if (!isWebRTCSupported()) {
-    throw new Error('WebRTC calls are supported on web browsers only in this build. Native Expo needs react-native-webrtc and a development build.');
+// ─── Platform Check ──────────────────────────────────────────
+export function isWebRTCSupported(): boolean {
+  if (Platform.OS === 'web') {
+    return (
+      typeof window !== 'undefined' &&
+      typeof RTCPeerConnection !== 'undefined' &&
+      !!navigator.mediaDevices?.getUserMedia
+    );
+  }
+  // Native এ react-native-webrtc available কিনা check
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { RTCPeerConnection: NativeRTC } = require('react-native-webrtc');
+    return !!NativeRTC;
+  } catch {
+    return false;
   }
 }
 
-function cleanupSession() {
+// ─── Cleanup Session ─────────────────────────────────────────
+export function cleanupSession() {
   if (!activeSession) return;
 
-  activeSession.unsubscribes.forEach((unsubscribe) => unsubscribe());
-  activeSession.localStream?.getTracks().forEach((track) => track.stop());
-  activeSession.remoteAudio?.remove();
-  activeSession.pc.close();
+  activeSession.unsubscribes.forEach((unsub) => unsub());
+  activeSession.localStream?.getTracks?.().forEach((track: any) => track.stop());
+
+  // Web এ audio element remove করা
+  if (Platform.OS === 'web' && activeSession.remoteAudio) {
+    activeSession.remoteAudio.remove();
+  }
+
+  activeSession.pc?.close();
   activeSession = null;
+  localMediaStream = null;
+  remoteMediaStream = null;
+  onStreamsUpdate?.(null, null);
 }
 
+// ─── Get Media Stream (Internal helper) ─────────────────────
+async function getUserMediaStream(type: CallType): Promise<any> {
+  if (Platform.OS === 'web') {
+    // Browser API
+    return navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: type === 'video',
+    });
+  } else {
+    // react-native-webrtc
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { mediaDevices } = require('react-native-webrtc');
+    return mediaDevices.getUserMedia({
+      audio: true,
+      video: type === 'video'
+        ? { facingMode: 'user', width: 640, height: 480 }
+        : false,
+    });
+  }
+}
+
+// ─── Create RTCPeerConnection ─────────────────────────────────
+function createRTCPeerConnection(): any {
+  if (Platform.OS === 'web') {
+    return new RTCPeerConnection(ICE_SERVERS);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { RTCPeerConnection: NativePeerConnection } = require('react-native-webrtc');
+    return new NativePeerConnection(ICE_SERVERS);
+  }
+}
+
+// ─── Create ICE Candidate ────────────────────────────────────
+function createIceCandidate(data: any): any {
+  if (Platform.OS === 'web') {
+    return new RTCIceCandidate(data);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { RTCIceCandidate: NativeIce } = require('react-native-webrtc');
+    return new NativeIce(data);
+  }
+}
+
+// ─── Create Session Description ──────────────────────────────
+function createSessionDescription(data: any): any {
+  if (Platform.OS === 'web') {
+    return new RTCSessionDescription(data);
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { RTCSessionDescription: NativeSDP } = require('react-native-webrtc');
+    return new NativeSDP(data);
+  }
+}
+
+// ─── Core: PeerConnection তৈরি ───────────────────────────────
 async function createPeerConnection(
   callRef: DocumentReference,
-  localCandidateCollection: 'callerCandidates' | 'receiverCandidates',
-  remoteCandidateCollection: 'callerCandidates' | 'receiverCandidates',
-  type: 'voice' | 'video',
+  localCandidates: 'callerCandidates' | 'receiverCandidates',
+  remoteCandidates: 'callerCandidates' | 'receiverCandidates',
+  type: CallType,
 ) {
-  ensureWebRTC();
   cleanupSession();
 
-  const pc = new RTCPeerConnection(ICE_SERVERS);
-  const localStream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: type === 'video',
+  const pc = createRTCPeerConnection();
+  const localStream = await getUserMediaStream(type);
+
+  localMediaStream = localStream;
+
+  // Local tracks যোগ করা
+  localStream.getTracks().forEach((track: any) => {
+    pc.addTrack(track, localStream);
   });
 
-  localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+  // Remote stream ধরার জন্য
+  let remoteStream: any = null;
 
-  const remoteAudio = document.createElement('audio');
-  remoteAudio.id = 'remote-audio-' + Date.now();
-  remoteAudio.autoplay = true;
-  remoteAudio.controls = false;
-  remoteAudio.muted = false;
-  remoteAudio.volume = 1.0;
-  (remoteAudio as any).playsInline = true;
-  remoteAudio.setAttribute('playsinline', '');
-  remoteAudio.style.display = 'none';
-  remoteAudio.style.visibility = 'hidden';
-  document.body.appendChild(remoteAudio);
+  if (Platform.OS === 'web') {
+    // Web: remoteAudio element তৈরি
+    const remoteAudio = document.createElement('audio');
+    remoteAudio.id = 'remote-audio-webrtc';
+    remoteAudio.autoplay = true;
+    remoteAudio.muted = false;
+    remoteAudio.volume = 1.0;
+    (remoteAudio as any).playsInline = true;
+    remoteAudio.style.display = 'none';
+    document.body.appendChild(remoteAudio);
 
-  pc.ontrack = (event) => {
-    console.log('Remote track received:', event.track.kind);
-    if (event.streams && event.streams.length > 0) {
-      remoteAudio.srcObject = event.streams[0];
-      
-      const playPromise = remoteAudio.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log('Remote audio playing successfully');
-          })
-          .catch((error) => {
-            console.error('Failed to play remote audio:', error);
-            // Try with user gesture if needed
-            if (error.name === 'NotAllowedError') {
-              console.warn('Autoplay policy blocked. Attempting delayed play...');
-              setTimeout(() => {
-                remoteAudio.play().catch((e) => console.error('Delayed play failed:', e));
-              }, 1000);
-            }
-          });
+    pc.ontrack = (event: RTCTrackEvent) => {
+      if (event.streams?.[0]) {
+        remoteAudio.srcObject = event.streams[0];
+        remoteStream = event.streams[0];
+        remoteMediaStream = remoteStream;
+        onStreamsUpdate?.(localStream, remoteStream);
+        remoteAudio.play().catch((err: Error) => {
+          console.warn('Remote audio play error:', err);
+        });
       }
+    };
+
+    activeSession = {
+      pc,
+      localStream,
+      remoteStream: null,
+      remoteAudio,
+      unsubscribes: [],
+    };
+  } else {
+    // Native (react-native-webrtc)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { MediaStream } = require('react-native-webrtc');
+    remoteStream = new MediaStream();
+    remoteMediaStream = remoteStream;
+
+    pc.ontrack = (event: any) => {
+      console.log('[WebRTC] ontrack:', event.track.kind);
+      event.streams[0]?.getTracks().forEach((track: any) => {
+        remoteStream.addTrack(track);
+      });
+      remoteMediaStream = remoteStream;
+      onStreamsUpdate?.(localStream, remoteStream);
+    };
+
+    activeSession = {
+      pc,
+      localStream,
+      remoteStream,
+      unsubscribes: [],
+    };
+  }
+
+  onStreamsUpdate?.(localStream, remoteMediaStream);
+
+  // ICE Candidate পাঠানো
+  pc.onicecandidate = async (event: any) => {
+    const candidate = event.candidate;
+    if (!candidate) return;
+    try {
+      await addDoc(collection(callRef, localCandidates), candidate.toJSON());
+    } catch (err) {
+      console.warn('[WebRTC] ICE candidate send error:', err);
     }
   };
 
-  pc.onicecandidate = async (event) => {
-    if (!event.candidate) return;
-    await addDoc(collection(callRef, localCandidateCollection), event.candidate.toJSON());
-  };
-
-  const processedCandidates = new Set<string>();
-  const unsubscribeCandidates = onSnapshot(collection(callRef, remoteCandidateCollection), (snapshot) => {
-    snapshot.docChanges().forEach((change) => {
-      if (change.type !== 'added' || processedCandidates.has(change.doc.id)) return;
-      processedCandidates.add(change.doc.id);
-      pc.addIceCandidate(new RTCIceCandidate(change.doc.data())).catch((error) => {
-        console.warn('Could not add ICE candidate:', error);
+  // Remote ICE candidates শোনা
+  const processedIds = new Set<string>();
+  const unsubCandidates = onSnapshot(
+    collection(callRef, remoteCandidates),
+    (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type !== 'added' || processedIds.has(change.doc.id)) return;
+        processedIds.add(change.doc.id);
+        const candidate = createIceCandidate(change.doc.data());
+        pc.addIceCandidate(candidate).catch((err: Error) => {
+          console.warn('[WebRTC] addIceCandidate error:', err);
+        });
       });
-    });
-  });
+    },
+  );
 
-  activeSession = {
-    pc,
-    localStream,
-    remoteAudio,
-    unsubscribes: [unsubscribeCandidates],
-  };
+  activeSession!.unsubscribes.push(unsubCandidates);
 
   return pc;
 }
 
-export async function startOutgoingWebRTCCall(callRef: DocumentReference, type: 'voice' | 'video') {
-  const pc = await createPeerConnection(callRef, 'callerCandidates', 'receiverCandidates', type);
-  const offer = await pc.createOffer();
+// ─── Caller: Call শুরু করা ───────────────────────────────────
+export async function startOutgoingWebRTCCall(
+  callRef: DocumentReference,
+  type: CallType,
+) {
+  const pc = await createPeerConnection(
+    callRef,
+    'callerCandidates',
+    'receiverCandidates',
+    type,
+  );
+
+  const offer = await pc.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: type === 'video',
+  });
   await pc.setLocalDescription(offer);
 
   await updateDoc(callRef, {
     webRTC: true,
-    offer: {
-      type: offer.type,
-      sdp: offer.sdp,
-    },
+    offer: { type: offer.type, sdp: offer.sdp },
   });
 
-  const unsubscribeAnswer = onSnapshot(callRef, async (snapshot) => {
+  // Receiver এর answer শোনা
+  const unsubAnswer = onSnapshot(callRef, async (snapshot) => {
     const call = snapshot.data();
     if (!call?.answer || pc.currentRemoteDescription) return;
-
     try {
-      await pc.setRemoteDescription(new RTCSessionDescription(call.answer));
-    } catch (error) {
-      console.warn('Could not set remote answer:', error);
+      await pc.setRemoteDescription(createSessionDescription(call.answer));
+      console.log('[WebRTC] Remote answer set successfully');
+    } catch (err) {
+      console.warn('[WebRTC] setRemoteDescription (answer) error:', err);
     }
   });
 
-  activeSession?.unsubscribes.push(unsubscribeAnswer);
+  activeSession?.unsubscribes.push(unsubAnswer);
 }
 
-export async function acceptIncomingWebRTCCall(callId: string, type: 'voice' | 'video') {
+// ─── Receiver: Call গ্রহণ করা ───────────────────────────────
+export async function acceptIncomingWebRTCCall(callId: string, type: CallType) {
   const callRef = doc(db, 'calls', callId);
   const callSnap = await getDoc(callRef);
   const call = callSnap.data();
 
   if (!call?.offer) {
-    throw new Error('The caller has not prepared a WebRTC offer yet. Please try again.');
+    throw new Error('Caller এর offer এখনো আসেনি। একটু পর আবার চেষ্টা করুন।');
   }
 
-  const pc = await createPeerConnection(callRef, 'receiverCandidates', 'callerCandidates', type);
-  await pc.setRemoteDescription(new RTCSessionDescription(call.offer));
+  const pc = await createPeerConnection(
+    callRef,
+    'receiverCandidates',
+    'callerCandidates',
+    type,
+  );
+
+  await pc.setRemoteDescription(createSessionDescription(call.offer));
 
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
 
   await updateDoc(callRef, {
     status: 'accepted',
-    answer: {
-      type: answer.type,
-      sdp: answer.sdp,
-    },
+    answer: { type: answer.type, sdp: answer.sdp },
+  });
+
+  console.log('[WebRTC] Call accepted, answer sent');
+}
+
+// ─── Call শেষ করা ────────────────────────────────────────────
+export function endActiveWebRTCCall() {
+  cleanupSession();
+}
+
+// ─── Mute/Unmute মাইক্রোফোন ──────────────────────────────────
+export function setMicrophoneMuted(muted: boolean) {
+  if (!activeSession?.localStream) return;
+  activeSession.localStream.getAudioTracks().forEach((track: any) => {
+    track.enabled = !muted;
   });
 }
 
-export function endActiveWebRTCCall() {
-  cleanupSession();
+// ─── Camera On/Off (Video call) ───────────────────────────────
+export function setCameraEnabled(enabled: boolean) {
+  if (!activeSession?.localStream) return;
+  activeSession.localStream.getVideoTracks().forEach((track: any) => {
+    track.enabled = enabled;
+  });
+}
+
+// ─── Camera ফ্লিপ করা (Front/Back) ──────────────────────────
+export async function flipCamera() {
+  if (Platform.OS === 'web') return; // Web এ কাজ করে না
+  if (!activeSession?.localStream) return;
+
+  const videoTrack = activeSession.localStream
+    .getVideoTracks()
+    .find((t: any) => t.kind === 'video');
+
+  if (videoTrack && typeof videoTrack._switchCamera === 'function') {
+    videoTrack._switchCamera();
+  }
+}
+
+// ─── Local/Remote stream পাওয়া ───────────────────────────────
+export function getLocalStream(): any {
+  return activeSession?.localStream || null;
+}
+
+export function getRemoteStream(): any {
+  return activeSession?.remoteStream || null;
 }

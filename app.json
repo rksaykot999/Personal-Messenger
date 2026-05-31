@@ -25,7 +25,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Personal Messenger কে ভিডিও কলের জন্য ক্যামেরা ব্যবহার করতে দিন।",
+          "microphonePermission": "Personal Messenger কে ভয়েস ও ভিডিও কলের জন্য মাইক্রোফোন ব্যবহার করতে দিন."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false,

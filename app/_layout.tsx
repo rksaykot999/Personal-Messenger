@@ -3,12 +3,11 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useRef } from 'react';
-import { Alert, Animated, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import 'react-native-reanimated';
 
-import { GradientAvatar } from '@/components/ui/GradientAvatar';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ThemeProvider as AppThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { db } from '@/services/firebase';
@@ -17,7 +16,7 @@ import {
   addNotificationResponseReceivedListener,
   removeNotificationSubscription,
 } from '@/services/notifications';
-import { acceptIncomingWebRTCCall, endActiveWebRTCCall, isWebRTCSupported } from '@/services/webrtcCalls';
+import { endActiveWebRTCCall } from '@/services/webrtcCalls';
 
 interface IncomingCall {
   id: string;
@@ -31,26 +30,14 @@ interface IncomingCall {
 
 function IncomingCallListener() {
   const { user } = useAuth();
-  const { theme } = useTheme();
-  const [incomingCall, setIncomingCall] = React.useState<IncomingCall | null>(null);
-  const [connectedCall, setConnectedCall] = React.useState<IncomingCall | null>(null);
-  const [callStartTime, setCallStartTime] = React.useState<number | null>(null);
-  const [callDuration, setCallDuration] = React.useState(0);
-  const callTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const formatCallDuration = (sec: number): string => {
-    const mins = Math.floor(sec / 60);
-    const secs = sec % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  // ─── Active call tracking (incoming ringing) ──────────────
+  const [shownCallId, setShownCallId] = React.useState<string | null>(null);
+  const activeCallIdRef = React.useRef<string | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      setIncomingCall(null);
-      setConnectedCall(null);
-      return;
-    }
+    if (!user) return;
 
+    // Firestore এ ringing status দেখা (receiver)
     const callsQuery = query(
       collection(db, 'calls'),
       where('receiverId', '==', user.uid),
@@ -59,159 +46,34 @@ function IncomingCallListener() {
 
     const unsubscribe = onSnapshot(callsQuery, (snapshot) => {
       if (snapshot.empty) {
-        setIncomingCall(null);
+        activeCallIdRef.current = null;
         return;
       }
 
       const callDoc = snapshot.docs[0];
-      setIncomingCall({ id: callDoc.id, ...callDoc.data() } as IncomingCall);
+      const callId = callDoc.id;
+
+      // একই call বারবার navigate না করার জন্য
+      if (activeCallIdRef.current === callId) return;
+      activeCallIdRef.current = callId;
+      setShownCallId(callId);
+
+      const callData = callDoc.data() as IncomingCall;
+
+      // Call screen এ navigate করা
+      const encodedName = encodeURIComponent(callData.callerName || 'Friend');
+      const encodedPhoto = encodeURIComponent(callData.callerPhotoURL || '');
+
+      router.push(
+        `/call/${callId}?role=receiver&type=${callData.type}&name=${encodedName}&photo=${encodedPhoto}` as any
+      );
     });
 
     return unsubscribe;
   }, [user]);
 
-  useEffect(() => {
-    if (!connectedCall) return;
-
-    const unsubscribe = onSnapshot(doc(db, 'calls', connectedCall.id), (snapshot) => {
-      const call = snapshot.data();
-      if (!call || call.status === 'ended' || call.status === 'declined' || call.status === 'missed') {
-        endActiveWebRTCCall();
-        saveCallHistoryAndCleanup('ended');
-      }
-    });
-
-    return unsubscribe;
-  }, [connectedCall, user]);
-
-  // Timer for connected calls
-  useEffect(() => {
-    if (!connectedCall || !callStartTime) return;
-
-    callTimerRef.current = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
-
-    return () => {
-      if (callTimerRef.current) {
-        clearInterval(callTimerRef.current);
-        callTimerRef.current = null;
-      }
-    };
-  }, [connectedCall, callStartTime]);
-
-  const updateCallStatus = async (call: IncomingCall, status: IncomingCall['status']) => {
-    await updateDoc(doc(db, 'calls', call.id), {
-      status,
-      updatedAt: serverTimestamp(),
-      ...(status === 'accepted' ? { acceptedAt: serverTimestamp() } : {}),
-      ...(status === 'ended' ? { endedAt: serverTimestamp() } : {}),
-    });
-  };
-
-  const saveCallHistoryAndCleanup = async (status: string) => {
-    if (!connectedCall || !user) return;
-
-    try {
-      await addDoc(collection(db, 'users', user.uid, 'callHistory'), {
-        callId: connectedCall.id,
-        callerId: connectedCall.callerId,
-        callerName: connectedCall.callerName,
-        callerPhotoURL: connectedCall.callerPhotoURL,
-        callType: 'incoming',
-        callStatus: status,
-        duration: callDuration,
-        createdAt: serverTimestamp(),
-      });
-    } catch (error) {
-      console.warn('Could not save incoming call history:', error);
-    }
-
-    setConnectedCall(null);
-    setCallStartTime(null);
-    setCallDuration(0);
-    if (callTimerRef.current) {
-      clearInterval(callTimerRef.current);
-      callTimerRef.current = null;
-    }
-  };
-
-  const acceptCall = async () => {
-    if (!incomingCall) return;
-    const call = incomingCall;
-    if (!isWebRTCSupported()) {
-      Alert.alert(
-        'WebRTC not available',
-        'Free STUN calls work on web browsers in this build. Native Expo requires react-native-webrtc with a development build.'
-      );
-      await updateCallStatus(call, 'declined');
-      setIncomingCall(null);
-      return;
-    }
-
-    setIncomingCall(null);
-    try {
-      await acceptIncomingWebRTCCall(call.id, call.type);
-      setConnectedCall(call);
-      setCallStartTime(Date.now());
-    } catch (error: any) {
-      Alert.alert('Call failed', error?.message || 'Could not answer this call.');
-      await updateCallStatus(call, 'declined');
-    }
-  };
-
-  const declineCall = async () => {
-    if (!incomingCall) return;
-    const call = incomingCall;
-    setIncomingCall(null);
-    await updateCallStatus(call, 'declined');
-  };
-
-  const endConnectedCall = async () => {
-    if (!connectedCall) return;
-    const call = connectedCall;
-    endActiveWebRTCCall();
-    await updateCallStatus(call, 'ended');
-    await saveCallHistoryAndCleanup('ended');
-  };
-
-  const activeCall = incomingCall || connectedCall;
-  if (!activeCall) return null;
-
-  return (
-    <Modal visible animationType="fade" transparent={false} onRequestClose={incomingCall ? declineCall : endConnectedCall}>
-      <LinearGradient colors={[theme.background, '#121212']} style={styles.callOverlay}>
-        <View style={styles.callHeader}>
-          <Ionicons name={activeCall.type === 'video' ? 'videocam' : 'call'} size={22} color="rgba(255,255,255,0.72)" />
-          <Text style={styles.callType}>{activeCall.type === 'video' ? 'VIDEO CALL' : 'VOICE CALL'}</Text>
-        </View>
-
-        <View style={styles.callIdentity}>
-          <View style={styles.callAvatarRing}>
-            <GradientAvatar name={activeCall.callerName || 'Friend'} photoURL={activeCall.callerPhotoURL} size={124} />
-          </View>
-          <Text style={styles.callName}>{activeCall.callerName || 'Friend'}</Text>
-          <Text style={styles.callStatus}>{incomingCall ? 'Incoming call...' : 'Connected'}</Text>
-          {connectedCall && <Text style={[styles.callDuration, { color: theme.accent }]}>{formatCallDuration(callDuration)}</Text>}
-        </View>
-
-        {incomingCall ? (
-          <View style={styles.callActions}>
-            <TouchableOpacity onPress={declineCall} style={[styles.callActionBtn, styles.declineBtn]}>
-              <Ionicons name="close" size={30} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={acceptCall} style={[styles.callActionBtn, styles.acceptBtn]}>
-              <Ionicons name="call" size={28} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity onPress={endConnectedCall} style={[styles.callActionBtn, styles.declineBtn]}>
-            <Ionicons name="close" size={30} color="#fff" />
-          </TouchableOpacity>
-        )}
-      </LinearGradient>
-    </Modal>
-  );
+  // এই component শুধু listener — কোনো UI নেই
+  return null;
 }
 
 // ─── Foreground In-App Notification Banner ──────────────────────────────────
@@ -467,6 +329,7 @@ function RootContent() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="call/[id]" options={{ animation: 'fade', presentation: 'fullScreenModal', headerShown: false }} />
         <Stack.Screen name="new-chat" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
