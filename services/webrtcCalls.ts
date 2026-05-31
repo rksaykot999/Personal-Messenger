@@ -19,6 +19,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { Platform } from 'react-native';
+import { Audio } from 'expo-av';
 
 // ─── STUN Servers (Google Free STUN) ─────────────────────────
 const ICE_SERVERS = {
@@ -237,19 +238,37 @@ async function createPeerConnection(
 
   // Remote ICE candidates শোনা
   const processedIds = new Set<string>();
+  let pendingCandidates: any[] = [];
+
   const unsubCandidates = onSnapshot(
     collection(callRef, remoteCandidates),
     (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type !== 'added' || processedIds.has(change.doc.id)) return;
         processedIds.add(change.doc.id);
-        const candidate = createIceCandidate(change.doc.data());
-        pc.addIceCandidate(candidate).catch((err: Error) => {
-          console.warn('[WebRTC] addIceCandidate error:', err);
-        });
+        const candidateData = change.doc.data();
+
+        if (pc.remoteDescription && pc.remoteDescription.type) {
+          const candidate = createIceCandidate(candidateData);
+          pc.addIceCandidate(candidate).catch((err: Error) => {
+            console.warn('[WebRTC] addIceCandidate error:', err);
+          });
+        } else {
+          pendingCandidates.push(candidateData);
+        }
       });
     },
   );
+
+  (pc as any).processPendingCandidates = () => {
+    pendingCandidates.forEach(data => {
+      const candidate = createIceCandidate(data);
+      pc.addIceCandidate(candidate).catch((err: Error) => {
+        console.warn('[WebRTC] addIceCandidate (delayed) error:', err);
+      });
+    });
+    pendingCandidates = [];
+  };
 
   activeSession!.unsubscribes.push(unsubCandidates);
 
@@ -286,6 +305,9 @@ export async function startOutgoingWebRTCCall(
     try {
       await pc.setRemoteDescription(createSessionDescription(call.answer));
       console.log('[WebRTC] Remote answer set successfully');
+      if (typeof (pc as any).processPendingCandidates === 'function') {
+        (pc as any).processPendingCandidates();
+      }
     } catch (err) {
       console.warn('[WebRTC] setRemoteDescription (answer) error:', err);
     }
@@ -312,6 +334,9 @@ export async function acceptIncomingWebRTCCall(callId: string, type: CallType) {
   );
 
   await pc.setRemoteDescription(createSessionDescription(call.offer));
+  if (typeof (pc as any).processPendingCandidates === 'function') {
+    (pc as any).processPendingCandidates();
+  }
 
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
@@ -366,4 +391,18 @@ export function getLocalStream(): any {
 
 export function getRemoteStream(): any {
   return activeSession?.remoteStream || null;
+}
+
+// ─── Audio Routing (expo-av) ─────────────────────────────────
+export async function setSpeakerphoneOn(speakerOn: boolean) {
+  if (Platform.OS === 'web') return;
+  try {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      playThroughEarpieceAndroid: !speakerOn,
+    });
+  } catch (err) {
+    console.warn('[WebRTC] Audio routing error:', err);
+  }
 }

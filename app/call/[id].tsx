@@ -26,6 +26,7 @@ import {
   setMicrophoneMuted,
   setOnStreamsUpdate,
   startOutgoingWebRTCCall,
+  setSpeakerphoneOn,
 } from '@/services/webrtcCalls';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -62,6 +63,24 @@ if (Platform.OS !== 'web') {
   }
 }
 
+// ─── Web Video Component (Web Only) ──────────────────────────
+const WebVideo = ({ stream, isLocal, mirror }: { stream: any, isLocal?: boolean, mirror?: boolean }) => {
+  const videoRef = useRef<any>(null);
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+  if (Platform.OS !== 'web') return null;
+  return React.createElement('video', {
+    ref: videoRef,
+    autoPlay: true,
+    playsInline: true,
+    muted: isLocal,
+    style: { width: '100%', height: '100%', objectFit: 'cover', transform: mirror ? 'scaleX(-1)' : 'none' },
+  });
+};
+
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // ─── Call Duration Format করা ─────────────────────────────────
@@ -92,9 +111,14 @@ export default function CallScreen() {
   >(role === 'caller' ? 'connecting' : 'ringing');
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(type === 'video'); // Auto-speaker for video
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isFrontCamera, setIsFrontCamera] = useState(true);
+
+  // Apply speakerphone routing
+  useEffect(() => {
+    setSpeakerphoneOn(isSpeakerOn);
+  }, [isSpeakerOn]);
 
   // ─── Stream States ─────────────────────────────────────────
   const [localStream, setLocalStream] = useState<any>(null);
@@ -325,9 +349,26 @@ export default function CallScreen() {
     }
   };
 
-  // ─── Video Streams (native only) ─────────────────────────
+  // ─── Video Streams ─────────────────────────────────────────
   const renderVideoStreams = () => {
-    if (!isVideo || Platform.OS === 'web' || !RTCView) return null;
+    if (!isVideo) return null;
+
+    if (Platform.OS === 'web') {
+      return (
+        <View style={StyleSheet.absoluteFill}>
+          {remoteStream && (
+            <WebVideo stream={remoteStream} />
+          )}
+          {localStream && isCameraOn && (
+            <View style={styles.localVideoContainer}>
+              <WebVideo stream={localStream} isLocal mirror={isFrontCamera} />
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    if (!RTCView) return null;
 
     return (
       <View style={StyleSheet.absoluteFill}>
@@ -363,7 +404,7 @@ export default function CallScreen() {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Background — video হলে stream, নয়তো gradient */}
-      {isVideo && Platform.OS !== 'web' ? (
+      {isVideo ? (
         renderVideoStreams()
       ) : (
         <LinearGradient
@@ -372,9 +413,13 @@ export default function CallScreen() {
         />
       )}
 
-      {/* Dark overlay video এর উপরে */}
+      {/* Dark overlay video এর উপরে (হালকা করা হলো) */}
       {isVideo && (
-        <View style={styles.videoOverlay} pointerEvents="none" />
+        <LinearGradient
+          colors={['rgba(0,0,0,0.7)', 'transparent', 'rgba(0,0,0,0.8)']}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
       )}
 
       {/* ─── Header ─── */}
@@ -421,33 +466,27 @@ export default function CallScreen() {
       <View style={styles.controls}>
         {role === 'receiver' && callStatus === 'ringing' ? (
           /* Incoming Call Actions */
-          <View style={[styles.endCallRow, { justifyContent: 'space-around', width: '100%' }]}>
+          <View style={styles.incomingActionsRow}>
             <TouchableOpacity
-              style={styles.endCallBtn}
+              style={styles.incomingBtnWrap}
               onPress={() => endCall('declined')}
               activeOpacity={0.8}
             >
-              <LinearGradient
-                colors={['#FF1744', '#D50000']}
-                style={styles.endCallGradient}
-              >
-                <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
-              </LinearGradient>
-              <Text style={[styles.controlLabel, { marginTop: 8, textAlign: 'center' }]}>Decline</Text>
+              <View style={[styles.actionBtn, { backgroundColor: '#FF3B30' }]}>
+                <Ionicons name="close" size={34} color="#fff" />
+              </View>
+              <Text style={styles.actionLabel}>Decline</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.endCallBtn}
+              style={styles.incomingBtnWrap}
               onPress={handleAcceptCall}
               activeOpacity={0.8}
             >
-              <LinearGradient
-                colors={['#00C853', '#00E676']}
-                style={styles.endCallGradient}
-              >
+              <View style={[styles.actionBtn, { backgroundColor: '#34C759' }]}>
                 <Ionicons name="call" size={32} color="#fff" />
-              </LinearGradient>
-              <Text style={[styles.controlLabel, { marginTop: 8, textAlign: 'center' }]}>Accept</Text>
+              </View>
+              <Text style={styles.actionLabel}>Accept</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -624,47 +663,79 @@ const styles = StyleSheet.create({
   },
   // ─── Controls ────────────────────────────────────────────
   controls: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     paddingBottom: Platform.OS === 'ios' ? 52 : 36,
-    gap: 24,
+    gap: 32,
   },
   controlRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
   controlBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
   },
   controlBtnActive: {
-    backgroundColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: '#fff',
   },
   controlLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 10,
-    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 8,
+    textAlign: 'center',
   },
   endCallRow: {
     alignItems: 'center',
+    marginTop: 16,
   },
   endCallBtn: {
-    shadowColor: '#FF1744',
+    shadowColor: '#FF3B30',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 10,
   },
   endCallGradient: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF3B30',
+  },
+  incomingActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  incomingBtnWrap: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionBtn: {
     width: 76,
     height: 76,
     borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  actionLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

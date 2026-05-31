@@ -6,7 +6,7 @@ import { sendPushNotificationAsync } from '@/services/notifications';
 import { endActiveWebRTCCall, isWebRTCSupported, startOutgoingWebRTCCall } from '@/services/webrtcCalls';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, orderBy, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, orderBy, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -341,7 +341,18 @@ export default function CallsScreen() {
                   'Are you sure you want to clear your entire call history?',
                   [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Clear All', style: 'destructive', onPress: () => setCallHistory([]) }
+                    { text: 'Clear All', style: 'destructive', onPress: async () => {
+                      if (!user) return;
+                      try {
+                        const deletePromises = callHistory.map(item => 
+                          deleteDoc(doc(db, 'users', user.uid, 'callHistory', item.id))
+                        );
+                        await Promise.all(deletePromises);
+                      } catch (err) {
+                        console.warn('Error clearing history:', err);
+                        Alert.alert('Error', 'Could not clear history.');
+                      }
+                    } }
                   ]
                 );
               }}
