@@ -602,6 +602,14 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
     }, 2000);
   };
 
+  const handleInputKeyPress = (event: any) => {
+    if (Platform.OS !== "web") return;
+    if (event.nativeEvent?.key === "Enter" && !event.nativeEvent?.shiftKey) {
+      event.preventDefault?.();
+      sendMessage();
+    }
+  };
+
   const sendMessage = async () => {
     if (!inputText.trim() || !id || !user || sending) return;
     const text = inputText.trim();
@@ -1354,6 +1362,7 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
                   ref={inputRef}
                   value={inputText}
                   onChangeText={handleTyping}
+                  onKeyPress={handleInputKeyPress}
                   placeholder="Type a message..."
                   placeholderTextColor={theme.textTertiary}
                   multiline

@@ -2,7 +2,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GradientAvatar } from './GradientAvatar';
 
 export interface Message {
@@ -134,20 +134,29 @@ export function MessageBubble({
           )}
 
           {message.text ? (
-            <Text
-              style={[
-                styles.text,
-                {
-                  color: textColor,
-                  fontSize: 15 * (fontSizeMultiplier || 1),
-                  lineHeight: 22 * (fontSizeMultiplier || 1),
-                  marginTop: message.type && message.type !== 'text' ? 8 : 0,
-                  paddingHorizontal: message.type && message.type !== 'text' ? 8 : 0,
-                },
-              ]}
+            <ScrollView
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+              style={{
+                maxHeight: 22 * 3 * (fontSizeMultiplier || 1),
+                marginTop: message.type && message.type !== 'text' ? 8 : 0,
+              }}
+              contentContainerStyle={{ flexGrow: 1 }}
             >
-              {message.text}
-            </Text>
+              <Text
+                style={[
+                  styles.text,
+                  {
+                    color: textColor,
+                    fontSize: 15 * (fontSizeMultiplier || 1),
+                    lineHeight: 22 * (fontSizeMultiplier || 1),
+                    paddingHorizontal: message.type && message.type !== 'text' ? 8 : 0,
+                  },
+                ]}
+              >
+                {message.text}
+              </Text>
+            </ScrollView>
           ) : null}
 
           {/* Time + status */}
