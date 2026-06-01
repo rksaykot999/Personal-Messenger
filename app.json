@@ -36,10 +36,7 @@
       "reactCompiler": false
     },
     "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "c108a023-e8fb-40d1-9fe7-a1c936b8a333"
-      }
+      "router": {}
     },
     "owner": "rksaykot999"
   }
