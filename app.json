@@ -15,7 +15,11 @@
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
-      "package": "com.rksaykot999.PersonalMessenger"
+      "package": "com.rksaykot999.PersonalMessenger",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -36,7 +40,10 @@
       "reactCompiler": false
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "fbf72a00-5439-4355-9d2e-851429b2f431"
+      }
     },
     "owner": "rksaykot999"
   }
