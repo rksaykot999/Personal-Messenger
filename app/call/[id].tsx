@@ -25,8 +25,8 @@ import {
   setCameraEnabled,
   setMicrophoneMuted,
   setOnStreamsUpdate,
-  startOutgoingWebRTCCall,
   setSpeakerphoneOn,
+  startOutgoingWebRTCCall,
 } from '@/services/webrtcCalls';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -42,6 +42,7 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   Dimensions,
   Platform,
   StatusBar,
@@ -50,15 +51,13 @@ import {
   TouchableOpacity,
   Vibration,
   View,
-  Animated,
 } from 'react-native';
 
 // react-native-webrtc শুধু native এ import করব
 let RTCView: any = null;
 if (Platform.OS !== 'web') {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    RTCView = require('react-native-webrtc').RTCView;
+    RTCView = eval('require')('react-native-webrtc').RTCView;
   } catch {
     RTCView = null;
   }
@@ -295,7 +294,7 @@ export default function CallScreen() {
     return () => {
       isCancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, type, role]);
 
   // ─── Accept Call ─────────────────────────────────────────

@@ -9,6 +9,7 @@
  */
 
 import { db } from '@/services/firebase';
+import { Audio } from 'expo-av';
 import {
   addDoc,
   collection,
@@ -19,7 +20,14 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { Platform } from 'react-native';
-import { Audio } from 'expo-av';
+
+function getNativeWebRTC(): any | null {
+  try {
+    return eval('require')('react-native-webrtc');
+  } catch {
+    return null;
+  }
+}
 
 // ─── STUN Servers (Google Free STUN) ─────────────────────────
 const ICE_SERVERS = {
@@ -64,14 +72,8 @@ export function isWebRTCSupported(): boolean {
       !!navigator.mediaDevices?.getUserMedia
     );
   }
-  // Native এ react-native-webrtc available কিনা check
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { RTCPeerConnection: NativeRTC } = require('react-native-webrtc');
-    return !!NativeRTC;
-  } catch {
-    return false;
-  }
+  const nativeWebRTC = getNativeWebRTC();
+  return !!nativeWebRTC?.RTCPeerConnection;
 }
 
 // ─── Cleanup Session ─────────────────────────────────────────
@@ -102,9 +104,11 @@ async function getUserMediaStream(type: CallType): Promise<any> {
       video: type === 'video',
     });
   } else {
-    // react-native-webrtc
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { mediaDevices } = require('react-native-webrtc');
+    const nativeWebRTC = getNativeWebRTC();
+    const { mediaDevices } = nativeWebRTC || {};
+    if (!mediaDevices) {
+      throw new Error('react-native-webrtc is not available');
+    }
     return mediaDevices.getUserMedia({
       audio: true,
       video: type === 'video'
@@ -119,8 +123,11 @@ function createRTCPeerConnection(): any {
   if (Platform.OS === 'web') {
     return new RTCPeerConnection(ICE_SERVERS);
   } else {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { RTCPeerConnection: NativePeerConnection } = require('react-native-webrtc');
+    const nativeWebRTC = getNativeWebRTC();
+    const { RTCPeerConnection: NativePeerConnection } = nativeWebRTC || {};
+    if (!NativePeerConnection) {
+      throw new Error('react-native-webrtc is not available');
+    }
     return new NativePeerConnection(ICE_SERVERS);
   }
 }
@@ -130,8 +137,11 @@ function createIceCandidate(data: any): any {
   if (Platform.OS === 'web') {
     return new RTCIceCandidate(data);
   } else {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { RTCIceCandidate: NativeIce } = require('react-native-webrtc');
+    const nativeWebRTC = getNativeWebRTC();
+    const { RTCIceCandidate: NativeIce } = nativeWebRTC || {};
+    if (!NativeIce) {
+      throw new Error('react-native-webrtc is not available');
+    }
     return new NativeIce(data);
   }
 }
@@ -141,8 +151,11 @@ function createSessionDescription(data: any): any {
   if (Platform.OS === 'web') {
     return new RTCSessionDescription(data);
   } else {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { RTCSessionDescription: NativeSDP } = require('react-native-webrtc');
+    const nativeWebRTC = getNativeWebRTC();
+    const { RTCSessionDescription: NativeSDP } = nativeWebRTC || {};
+    if (!NativeSDP) {
+      throw new Error('react-native-webrtc is not available');
+    }
     return new NativeSDP(data);
   }
 }
@@ -201,8 +214,11 @@ async function createPeerConnection(
     };
   } else {
     // Native (react-native-webrtc)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MediaStream } = require('react-native-webrtc');
+    const nativeWebRTC = getNativeWebRTC();
+    const { MediaStream } = nativeWebRTC || {};
+    if (!MediaStream) {
+      throw new Error('react-native-webrtc is not available');
+    }
     remoteStream = new MediaStream();
     remoteMediaStream = remoteStream;
 
