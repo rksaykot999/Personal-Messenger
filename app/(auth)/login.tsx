@@ -6,8 +6,7 @@ import {
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
-import { makeRedirectUri, ResponseType } from 'expo-auth-session';
-import { LinearGradient } from 'expo-linear-gradient';
+import { makeRedirectUri } from 'expo-auth-session';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -54,9 +53,9 @@ export default function LoginScreen() {
       if (authentication?.idToken) {
         setGoogleLoading(true);
         signInWithGoogleCredential(authentication.idToken, authentication.accessToken ?? undefined)
-          .then(() => router.replace('/(tabs)' as any))
           .catch((e: any) => Alert.alert('Google Sign-In Failed', e.message || 'Please try again'))
           .finally(() => setGoogleLoading(false));
+          // Navigation handled automatically by RootContent in _layout.tsx
       } else {
         Alert.alert('Google Sign-In Failed', 'No ID token received. Please try again.');
       }
@@ -84,7 +83,8 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email.trim().toLowerCase(), password);
-      router.replace('/(tabs)' as any);
+      // Navigation is handled automatically by RootContent in _layout.tsx
+      // when the user state changes via onAuthStateChanged
     } catch (e: any) {
       shake();
       Alert.alert('Login Failed', e.message || 'Invalid credentials. Please try again.');
@@ -99,7 +99,7 @@ export default function LoginScreen() {
       setGoogleLoading(true);
       try {
         await signInWithGoogleWeb();
-        router.replace('/(tabs)' as any);
+        // Navigation handled automatically by RootContent in _layout.tsx
       } catch (e: any) {
         Alert.alert('Google Sign-In Failed', e.message || 'Please try again');
       } finally {
