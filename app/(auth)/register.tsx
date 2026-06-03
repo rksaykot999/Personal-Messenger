@@ -12,6 +12,58 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { PremiumButton } from '@/components/ui/PremiumButton';
 import { GradientAvatar } from '@/components/ui/GradientAvatar';
 
+import { signInWithGoogleCredential, signInWithGoogleWeb } from '@/services/firebase';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
+
+WebBrowser.maybeCompleteAuthSession();
+
+const WEB_CLIENT_ID = '443606839141-b3r8kbuqdsbe719dhkuejp0rdl1jijk9.apps.googleusercontent.com';
+const ANDROID_CLIENT_ID = WEB_CLIENT_ID;
+const IOS_CLIENT_ID = WEB_CLIENT_ID;
+
+function NativeGoogleAuth({
+  promptRef,
+  setGoogleLoading,
+  showAlert,
+}: {
+  promptRef: React.RefObject<() => Promise<any>>;
+  setGoogleLoading: (v: boolean) => void;
+  showAlert: (t: string, m: string) => void;
+}) {
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: ANDROID_CLIENT_ID || undefined,
+    iosClientId: IOS_CLIENT_ID || undefined,
+    webClientId: WEB_CLIENT_ID || undefined,
+    redirectUri: makeRedirectUri(),
+  });
+
+  React.useEffect(() => {
+    if (promptRef && promptAsync) {
+      promptRef.current = promptAsync;
+    }
+  }, [promptAsync]);
+
+  React.useEffect(() => {
+    if (response?.type === 'success') {
+      const { authentication } = response;
+      if (authentication?.idToken) {
+        setGoogleLoading(true);
+        signInWithGoogleCredential(authentication.idToken, authentication.accessToken ?? undefined)
+          .catch((e: any) => showAlert('Google Sign-In Failed', e.message || 'Please try again'))
+          .finally(() => setGoogleLoading(false));
+      } else {
+        showAlert('Google Sign-In Failed', 'No ID token received. Please try again.');
+      }
+    } else if (response?.type === 'error') {
+      showAlert('Google Sign-In Failed', response.error?.message || 'Please try again');
+    }
+  }, [response]);
+
+  return null;
+}
+
 export default function RegisterScreen() {
   const { theme } = useTheme();
   const { register } = useAuth();
@@ -21,7 +73,40 @@ export default function RegisterScreen() {
   const [confirm, setConfirm] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
+  const promptRef = useRef<() => Promise<any>>(async () => ({ type: 'error' }));
+
+  const showAlert = (title: string, message: string) => {
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert(`${title}\n\n${message}`);
+      } else {
+        Alert.alert(title, message);
+      }
+    } catch (err) {
+      console.error('showAlert failed:', err);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (Platform.OS === 'web') {
+      setGoogleLoading(true);
+      try {
+        await signInWithGoogleWeb();
+      } catch (e: any) {
+        showAlert('Google Sign-In Failed', e.message || 'Please try again');
+      } finally {
+        setGoogleLoading(false);
+      }
+    } else {
+      try {
+        await promptRef.current();
+      } catch (err) {
+        console.error('promptAsync failed', err);
+      }
+    }
+  };
 
   const shake = () => {
     Animated.sequence([
@@ -62,6 +147,9 @@ export default function RegisterScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
+      {Platform.OS !== 'web' && (
+        <NativeGoogleAuth promptRef={promptRef} setGoogleLoading={setGoogleLoading} showAlert={showAlert} />
+      )}
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <View style={[styles.glow, { backgroundColor: theme.secondary }]} />
 
@@ -167,8 +255,15 @@ export default function RegisterScreen() {
 
             {/* Social Logins */}
             <View style={styles.socialWrap}>
-              <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Google Sign-In will be available soon.')}>
-                <Ionicons name="logo-google" size={24} color={theme.text} />
+              <TouchableOpacity
+                style={[styles.socialBtn, { borderColor: theme.border }]}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+              >
+                {googleLoading
+                  ? <Ionicons name="reload-outline" size={24} color={theme.textTertiary} />
+                  : <Ionicons name="logo-google" size={24} color={theme.text} />
+                }
               </TouchableOpacity>
               <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Apple Sign-In will be available soon.')}>
                 <Ionicons name="logo-apple" size={24} color={theme.text} />
