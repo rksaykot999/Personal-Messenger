@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
-import { makeRedirectUri } from 'expo-auth-session';
+import { makeRedirectUri, ResponseType } from 'expo-auth-session';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -44,7 +44,7 @@ export default function LoginScreen() {
     androidClientId: ANDROID_CLIENT_ID || undefined,
     iosClientId: IOS_CLIENT_ID || undefined,
     webClientId: WEB_CLIENT_ID || undefined,
-    redirectUri: makeRedirectUri({ useProxy: true }),
+    redirectUri: makeRedirectUri(),
   });
 
   // Handle the response from the Google auth prompt (native)
