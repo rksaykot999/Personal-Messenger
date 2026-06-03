@@ -1,3 +1,14 @@
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  useFonts,
+} from '@expo-google-fonts/inter';
+import {
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+} from '@expo-google-fonts/poppins';
 import { Ionicons } from '@expo/vector-icons';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -5,19 +16,8 @@ import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, LogBox } from 'react-native';
+import { Animated, Image, LogBox, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import 'react-native-reanimated';
-import {
-  useFonts,
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
-import {
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
 
 // Ignore specific developer warnings in development environments like Expo Go
 LogBox.ignoreLogs([
@@ -567,11 +567,42 @@ const styles = StyleSheet.create({
 });
 
 export default function RootLayout() {
+  class ErrorBoundary extends React.Component<any, { error: any; info: any }> {
+    constructor(props: any) {
+      super(props);
+      this.state = { error: null, info: null };
+    }
+
+    componentDidCatch(error: any, info: any) {
+      // eslint-disable-next-line no-console
+      console.error('Unhandled render error:', error, info);
+      this.setState({ error, info });
+    }
+
+    render() {
+      if (this.state.error) {
+        const message = this.state.error?.message || String(this.state.error);
+        const stack = this.state.info?.componentStack || '';
+        return (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 12 }}>Application Error</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', marginBottom: 8 }}>{message}</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{stack}</Text>
+          </View>
+        );
+      }
+      // @ts-ignore
+      return this.props.children;
+    }
+  }
+
   return (
     <AppThemeProvider>
-      <AuthProvider>
-        <RootContent />
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <RootContent />
+        </AuthProvider>
+      </ErrorBoundary>
     </AppThemeProvider>
   );
 }

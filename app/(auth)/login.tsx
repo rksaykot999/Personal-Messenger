@@ -1,19 +1,25 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, KeyboardAvoidingView, Platform, Animated,
-  StatusBar, Alert,
-} from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
-import { makeRedirectUri } from 'expo-auth-session';
+import { PremiumButton } from '@/components/ui/PremiumButton';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { signInWithGoogleCredential, signInWithGoogleWeb } from '@/services/firebase';
 import { Ionicons } from '@expo/vector-icons';
+import { makeRedirectUri } from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { signInWithGoogleWeb, signInWithGoogleCredential } from '@/services/firebase';
-import { useTheme } from '@/contexts/ThemeContext';
-import { PremiumButton } from '@/components/ui/PremiumButton';
+import * as WebBrowser from 'expo-web-browser';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  KeyboardAvoidingView, Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput, TouchableOpacity,
+  View,
+} from 'react-native';
 
 // Required for expo-auth-session to handle the redirect on native
 WebBrowser.maybeCompleteAuthSession();
@@ -28,6 +34,51 @@ const ANDROID_CLIENT_ID = ''; // e.g. '443606839141-xxxx.apps.googleusercontent.
 const IOS_CLIENT_ID = '';     // e.g. '443606839141-yyyy.apps.googleusercontent.com'
 const WEB_CLIENT_ID = '';     // e.g. '443606839141-zzzz.apps.googleusercontent.com'
 
+// Native-only helper component: keeps the expo-auth-session hook
+// inside a component that is only mounted on native platforms so
+// we don't call hooks conditionally in the main LoginScreen.
+function NativeGoogleAuth({
+  promptRef,
+  setGoogleLoading,
+  showAlert,
+}: {
+  promptRef: React.RefObject<() => Promise<any>>;
+  setGoogleLoading: (v: boolean) => void;
+  showAlert: (t: string, m: string) => void;
+}) {
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: ANDROID_CLIENT_ID || undefined,
+    iosClientId: IOS_CLIENT_ID || undefined,
+    webClientId: WEB_CLIENT_ID || undefined,
+    redirectUri: makeRedirectUri(),
+  });
+
+  useEffect(() => {
+    // expose promptAsync to parent via ref
+    if (promptRef && promptAsync) {
+      promptRef.current = promptAsync;
+    }
+  }, [promptAsync]);
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { authentication } = response;
+      if (authentication?.idToken) {
+        setGoogleLoading(true);
+        signInWithGoogleCredential(authentication.idToken, authentication.accessToken ?? undefined)
+          .catch((e: any) => showAlert('Google Sign-In Failed', e.message || 'Please try again'))
+          .finally(() => setGoogleLoading(false));
+      } else {
+        showAlert('Google Sign-In Failed', 'No ID token received. Please try again.');
+      }
+    } else if (response?.type === 'error') {
+      showAlert('Google Sign-In Failed', response.error?.message || 'Please try again');
+    }
+  }, [response]);
+
+  return null;
+}
+
 export default function LoginScreen() {
   const { theme } = useTheme();
   const { login } = useAuth();
@@ -38,31 +89,22 @@ export default function LoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // ── Google Auth Session (native only) ────────────────────────────
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: ANDROID_CLIENT_ID || undefined,
-    iosClientId: IOS_CLIENT_ID || undefined,
-    webClientId: WEB_CLIENT_ID || undefined,
-    redirectUri: makeRedirectUri(),
-  });
+  const promptRef = useRef<() => Promise<any>>(async () => ({ type: 'error' }));
 
-  // Handle the response from the Google auth prompt (native)
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const { authentication } = response;
-      if (authentication?.idToken) {
-        setGoogleLoading(true);
-        signInWithGoogleCredential(authentication.idToken, authentication.accessToken ?? undefined)
-          .catch((e: any) => Alert.alert('Google Sign-In Failed', e.message || 'Please try again'))
-          .finally(() => setGoogleLoading(false));
-          // Navigation handled automatically by RootContent in _layout.tsx
+  const showAlert = (title: string, message: string) => {
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        // window.alert is a safe fallback on web where Alert.alert may be inconsistent
+        window.alert(`${title}\n\n${message}`);
       } else {
-        Alert.alert('Google Sign-In Failed', 'No ID token received. Please try again.');
+        Alert.alert(title, message);
       }
-    } else if (response?.type === 'error') {
-      Alert.alert('Google Sign-In Failed', response.error?.message || 'Please try again');
+    } catch (err) {
+      // Ensure we never crash due to alert invocation
+      // eslint-disable-next-line no-console
+      console.error('showAlert failed:', err);
     }
-  }, [response]);
+  };
 
   const shake = () => {
     Animated.sequence([
@@ -77,17 +119,22 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (!email.trim() || !password) {
       shake();
-      Alert.alert('Missing info', 'Please enter your email and password.');
+      showAlert('Missing info', 'Please enter your email and password.');
       return;
     }
     setLoading(true);
+    // Diagnostic log
+    // eslint-disable-next-line no-console
+    console.log('Login attempt for', email);
     try {
       await login(email.trim().toLowerCase(), password);
       // Navigation is handled automatically by RootContent in _layout.tsx
       // when the user state changes via onAuthStateChanged
     } catch (e: any) {
       shake();
-      Alert.alert('Login Failed', e.message || 'Invalid credentials. Please try again.');
+      // eslint-disable-next-line no-console
+      console.error('Login failed', e);
+      showAlert('Login Failed', e.message || 'Invalid credentials. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -101,19 +148,28 @@ export default function LoginScreen() {
         await signInWithGoogleWeb();
         // Navigation handled automatically by RootContent in _layout.tsx
       } catch (e: any) {
-        Alert.alert('Google Sign-In Failed', e.message || 'Please try again');
+        showAlert('Google Sign-In Failed', e.message || 'Please try again');
       } finally {
         setGoogleLoading(false);
       }
     } else {
       // Native: trigger the expo-auth-session prompt
-      // The result is handled in the useEffect above
-      await promptAsync();
+      // The native hook is implemented in NativeGoogleAuth and exposes
+      // the `promptAsync` via `promptRef`.
+      try {
+        await promptRef.current();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('promptAsync failed', err);
+      }
     }
   };
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
+      {Platform.OS !== 'web' && (
+        <NativeGoogleAuth promptRef={promptRef} setGoogleLoading={setGoogleLoading} showAlert={showAlert} />
+      )}
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Background Glow */}
