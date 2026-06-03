@@ -30,9 +30,9 @@ WebBrowser.maybeCompleteAuthSession();
 // For a quick test you can leave them as empty strings — only the
 // web popup (Platform.OS === 'web') will work without them.
 // ──────────────────────────────────────────────────────────────────
-const ANDROID_CLIENT_ID = ''; // e.g. '443606839141-xxxx.apps.googleusercontent.com'
-const IOS_CLIENT_ID = '';     // e.g. '443606839141-yyyy.apps.googleusercontent.com'
-const WEB_CLIENT_ID = '';     // e.g. '443606839141-zzzz.apps.googleusercontent.com'
+const WEB_CLIENT_ID = '443606839141-b3r8kbuqdsbe719dhkuejp0rdl1jijk9.apps.googleusercontent.com';
+const ANDROID_CLIENT_ID = WEB_CLIENT_ID;
+const IOS_CLIENT_ID = WEB_CLIENT_ID;
 
 // Native-only helper component: keeps the expo-auth-session hook
 // inside a component that is only mounted on native platforms so

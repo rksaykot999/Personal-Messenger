@@ -44,7 +44,7 @@ if (!isWeb) {
  * Register for push notifications and return the Expo Push Token
  */
 export async function registerForPushNotificationsAsync() {
-  if (isWeb || isExpoGo) {
+  if (isWeb) {
     return null;
   }
 
@@ -70,16 +70,19 @@ export async function registerForPushNotificationsAsync() {
     }
 
     // Get permissions
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    const { status: existingStatus, granted } = await Notifications.getPermissionsAsync();
+    // Log existing status for debugging
+    console.log('Existing notification permission status:', existingStatus, 'granted:', granted);
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
+      const { status, granted: grantedNow } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
+      console.log('Requested notification permission, result:', status, 'granted:', grantedNow);
     }
 
     if (finalStatus !== 'granted') {
-      console.log('Push notification permission not granted');
+      console.log('Push notification permission not granted (finalStatus):', finalStatus);
       return null;
     }
 
@@ -93,7 +96,7 @@ export async function registerForPushNotificationsAsync() {
       projectId,
     })).data;
 
-    console.log('Expo Push Token retrieved');
+    console.log('Expo Push Token retrieved:', token);
 
     if (token) {
       await saveTokenToFirestore(token);
