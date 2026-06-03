@@ -1,10 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 // @ts-ignore
-import { Auth, getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { Auth, getAuth, initializeAuth, getReactNativePersistence, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { Platform } from 'react-native';
+import * as Google from 'expo-auth-session/providers/google';
+import { makeRedirectUri } from 'expo-auth-session';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAKGQwNKtu9DwdSRHWRgsKKM4dPYwjK6l0",
@@ -37,3 +39,31 @@ export { auth };
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export default app;
+
+/**
+ * Sign in with Google using Expo Auth Session.
+ * Returns a Firebase Auth credential.
+ */
+export async function signInWithGoogleAsync() {
+  const redirectUri = makeRedirectUri({ useProxy: true });
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    iosClientId: '<YOUR_IOS_CLIENT_ID>',
+    androidClientId: '<YOUR_ANDROID_CLIENT_ID>',
+    expoClientId: '<YOUR_EXPO_CLIENT_ID>',
+    webClientId: '<YOUR_WEB_CLIENT_ID>',
+    redirectUri,
+  });
+
+  const result = await promptAsync();
+  if (result.type !== 'success') {
+    throw new Error('Google sign‑in cancelled');
+  }
+
+  const { idToken, accessToken } = result.params;
+  if (!idToken) {
+    throw new Error('Missing idToken from Google');
+  }
+
+  const credential = GoogleAuthProvider.credential(idToken, accessToken);
+  return signInWithCredential(auth, credential);
+}

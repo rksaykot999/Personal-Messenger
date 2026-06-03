@@ -4,11 +4,14 @@ import {
   ScrollView, KeyboardAvoidingView, Platform, Animated,
   StatusBar, Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { makeRedirectUri } from 'expo-auth-session';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { signInWithGoogleAsync } from '@/services/firebase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { PremiumButton } from '@/components/ui/PremiumButton';
 
@@ -134,7 +137,14 @@ export default function LoginScreen() {
 
             {/* Social Logins */}
             <View style={styles.socialWrap}>
-              <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Google Sign-In will be available soon.')}>
+              <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={async () => {
+                  try {
+                    await signInWithGoogleAsync();
+                    router.replace('/(tabs)' as any);
+                  } catch (e: any) {
+                    Alert.alert('Google Sign-In Failed', e.message || 'Please try again');
+                  }
+                }}>
                 <Ionicons name="logo-google" size={24} color={theme.text} />
               </TouchableOpacity>
               <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Apple Sign-In will be available soon.')}>
