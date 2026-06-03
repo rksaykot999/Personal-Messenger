@@ -47,33 +47,38 @@ const getGlobalFontFamily = (style: any) => {
 };
 
 // Override React Native's Text component render to use professional fonts globally
-const oldTextRender = (Text as any).render;
-if (oldTextRender) {
-  (Text as any).render = function (...args: any[]) {
-    const origin = oldTextRender.call(this, ...args);
-    if (origin && origin.props) {
-      const fontFamily = getGlobalFontFamily(origin.props.style);
-      return React.cloneElement(origin, {
-        style: [{ fontFamily }, origin.props.style],
-      });
-    }
-    return origin;
-  };
+// (web uses CSS so patching render breaks CSSStyleDeclaration — skip on web)
+if (Platform.OS !== 'web') {
+  const oldTextRender = (Text as any).render;
+  if (oldTextRender) {
+    (Text as any).render = function (...args: any[]) {
+      const origin = oldTextRender.call(this, ...args);
+      if (origin && origin.props) {
+        const fontFamily = getGlobalFontFamily(origin.props.style);
+        return React.cloneElement(origin, {
+          style: [{ fontFamily }, origin.props.style],
+        });
+      }
+      return origin;
+    };
+  }
 }
 
 // Override React Native's TextInput component render to use professional fonts globally
-const oldTextInputRender = (TextInput as any).render;
-if (oldTextInputRender) {
-  (TextInput as any).render = function (...args: any[]) {
-    const origin = oldTextInputRender.call(this, ...args);
-    if (origin && origin.props) {
-      const fontFamily = getGlobalFontFamily(origin.props.style);
-      return React.cloneElement(origin, {
-        style: [{ fontFamily }, origin.props.style],
-      });
-    }
-    return origin;
-  };
+if (Platform.OS !== 'web') {
+  const oldTextInputRender = (TextInput as any).render;
+  if (oldTextInputRender) {
+    (TextInput as any).render = function (...args: any[]) {
+      const origin = oldTextInputRender.call(this, ...args);
+      if (origin && origin.props) {
+        const fontFamily = getGlobalFontFamily(origin.props.style);
+        return React.cloneElement(origin, {
+          style: [{ fontFamily }, origin.props.style],
+        });
+      }
+      return origin;
+    };
+  }
 }
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
