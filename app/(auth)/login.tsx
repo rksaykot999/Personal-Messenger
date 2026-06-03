@@ -1,19 +1,33 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Animated,
   StatusBar, Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 import { makeRedirectUri } from 'expo-auth-session';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { signInWithGoogleAsync } from '@/services/firebase';
+import { signInWithGoogleWeb, signInWithGoogleCredential } from '@/services/firebase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { PremiumButton } from '@/components/ui/PremiumButton';
+
+// Required for expo-auth-session to handle the redirect on native
+WebBrowser.maybeCompleteAuthSession();
+
+// ──────────────────────────────────────────────────────────────────
+// IMPORTANT: Replace these with your real Google OAuth client IDs
+// from https://console.cloud.google.com → APIs & Services → Credentials
+// For a quick test you can leave them as empty strings — only the
+// web popup (Platform.OS === 'web') will work without them.
+// ──────────────────────────────────────────────────────────────────
+const ANDROID_CLIENT_ID = ''; // e.g. '443606839141-xxxx.apps.googleusercontent.com'
+const IOS_CLIENT_ID = '';     // e.g. '443606839141-yyyy.apps.googleusercontent.com'
+const WEB_CLIENT_ID = '';     // e.g. '443606839141-zzzz.apps.googleusercontent.com'
 
 export default function LoginScreen() {
   const { theme } = useTheme();
@@ -22,7 +36,34 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  // ── Google Auth Session (native only) ────────────────────────────
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: ANDROID_CLIENT_ID || undefined,
+    iosClientId: IOS_CLIENT_ID || undefined,
+    webClientId: WEB_CLIENT_ID || undefined,
+    redirectUri: makeRedirectUri({ useProxy: true }),
+  });
+
+  // Handle the response from the Google auth prompt (native)
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { authentication } = response;
+      if (authentication?.idToken) {
+        setGoogleLoading(true);
+        signInWithGoogleCredential(authentication.idToken, authentication.accessToken ?? undefined)
+          .then(() => router.replace('/(tabs)' as any))
+          .catch((e: any) => Alert.alert('Google Sign-In Failed', e.message || 'Please try again'))
+          .finally(() => setGoogleLoading(false));
+      } else {
+        Alert.alert('Google Sign-In Failed', 'No ID token received. Please try again.');
+      }
+    } else if (response?.type === 'error') {
+      Alert.alert('Google Sign-In Failed', response.error?.message || 'Please try again');
+    }
+  }, [response]);
 
   const shake = () => {
     Animated.sequence([
@@ -49,6 +90,25 @@ export default function LoginScreen() {
       Alert.alert('Login Failed', e.message || 'Invalid credentials. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (Platform.OS === 'web') {
+      // Web: use Firebase popup — no client IDs needed
+      setGoogleLoading(true);
+      try {
+        await signInWithGoogleWeb();
+        router.replace('/(tabs)' as any);
+      } catch (e: any) {
+        Alert.alert('Google Sign-In Failed', e.message || 'Please try again');
+      } finally {
+        setGoogleLoading(false);
+      }
+    } else {
+      // Native: trigger the expo-auth-session prompt
+      // The result is handled in the useEffect above
+      await promptAsync();
     }
   };
 
@@ -137,15 +197,15 @@ export default function LoginScreen() {
 
             {/* Social Logins */}
             <View style={styles.socialWrap}>
-              <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={async () => {
-                  try {
-                    await signInWithGoogleAsync();
-                    router.replace('/(tabs)' as any);
-                  } catch (e: any) {
-                    Alert.alert('Google Sign-In Failed', e.message || 'Please try again');
-                  }
-                }}>
-                <Ionicons name="logo-google" size={24} color={theme.text} />
+              <TouchableOpacity
+                style={[styles.socialBtn, { borderColor: theme.border }]}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+              >
+                {googleLoading
+                  ? <Ionicons name="reload-outline" size={24} color={theme.textTertiary} />
+                  : <Ionicons name="logo-google" size={24} color={theme.text} />
+                }
               </TouchableOpacity>
               <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Apple Sign-In will be available soon.')}>
                 <Ionicons name="logo-apple" size={24} color={theme.text} />
