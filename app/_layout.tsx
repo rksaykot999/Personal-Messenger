@@ -5,8 +5,76 @@ import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, LogBox } from 'react-native';
 import 'react-native-reanimated';
+import {
+  useFonts,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import {
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+} from '@expo-google-fonts/poppins';
+
+// Ignore specific developer warnings in development environments like Expo Go
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  'Layout children: Too many screens defined',
+]);
+
+// Helper to resolve font family based on styles
+const getGlobalFontFamily = (style: any) => {
+  if (!style) return 'Inter_400Regular';
+  try {
+    const flatStyle = StyleSheet.flatten(style);
+    if (!flatStyle || !flatStyle.fontFamily) {
+      const weight = flatStyle?.fontWeight;
+      if (weight === 'bold' || weight === '700' || weight === '800') {
+        return 'Inter_700Bold';
+      }
+      if (weight === '600' || weight === '500' || weight === 'medium') {
+        return 'Inter_500Medium';
+      }
+      return 'Inter_400Regular';
+    }
+    return flatStyle.fontFamily;
+  } catch {
+    return 'Inter_400Regular';
+  }
+};
+
+// Override React Native's Text component render to use professional fonts globally
+const oldTextRender = (Text as any).render;
+if (oldTextRender) {
+  (Text as any).render = function (...args: any[]) {
+    const origin = oldTextRender.call(this, ...args);
+    if (origin && origin.props) {
+      const fontFamily = getGlobalFontFamily(origin.props.style);
+      return React.cloneElement(origin, {
+        style: [{ fontFamily }, origin.props.style],
+      });
+    }
+    return origin;
+  };
+}
+
+// Override React Native's TextInput component render to use professional fonts globally
+const oldTextInputRender = (TextInput as any).render;
+if (oldTextInputRender) {
+  (TextInput as any).render = function (...args: any[]) {
+    const origin = oldTextInputRender.call(this, ...args);
+    if (origin && origin.props) {
+      const fontFamily = getGlobalFontFamily(origin.props.style);
+      return React.cloneElement(origin, {
+        style: [{ fontFamily }, origin.props.style],
+      });
+    }
+    return origin;
+  };
+}
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ThemeProvider as AppThemeProvider, useTheme } from '@/contexts/ThemeContext';
@@ -268,6 +336,15 @@ function RootContent() {
   const { theme, mode } = useTheme();
   const [isAppReady, setIsAppReady] = React.useState(false);
 
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
+
   // ─── Notification tap → navigate to chat ───────────────────────────────
   useEffect(() => {
     const responseSub = addNotificationResponseReceivedListener((response: any) => {
@@ -318,7 +395,7 @@ function RootContent() {
     }
   }, [user, isAppReady]);
 
-  if (!isAppReady) {
+  if (!isAppReady || !fontsLoaded) {
     return <StartupAnimation theme={theme} />;
   }
 

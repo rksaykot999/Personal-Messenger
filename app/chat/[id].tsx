@@ -3,6 +3,7 @@ import { Message, MessageBubble } from "@/components/ui/MessageBubble";
 import { TypingIndicator } from "@/components/ui/TypingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { Typography } from "@/constants/theme";
 import { db } from "@/services/firebase";
 import { dismissAllNotifications, sendPushNotificationAsync } from "@/services/notifications";
 import { uploadToSupabaseRest } from "@/services/supabase";
@@ -68,7 +69,7 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
   const [sending, setSending] = useState(false);
   const [chatInfo, setChatInfo] = useState<any>(null);
   const [otherUser, setOtherUser] = useState<any>(null);
-  const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [selectedMsg, setSelectedMsg] = useState<Message | null>(null);
   const [reactionModalVisible, setReactionModalVisible] = useState(false);
@@ -257,21 +258,25 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
 
   // Listen for typing indicator
   useEffect(() => {
-    if (!id || !otherUser || isGroupChat) return;
-    const typingRef = doc(db, "chats", id, "typing", otherUser.uid);
+    if (!id || !user) return;
+    const typingRef = collection(db, "chats", id, "typing");
     const unsub = onSnapshot(
       typingRef,
       (snap) => {
-        if (snap.exists()) {
-          setIsTyping(snap.data()?.isTyping || false);
-        }
+        const activeTyping: string[] = [];
+        snap.forEach((doc) => {
+          if (doc.id !== user.uid && doc.data()?.isTyping) {
+            activeTyping.push(doc.id);
+          }
+        });
+        setTypingUsers(activeTyping);
       },
       (error) => {
         console.error("Typing indicator subscription error:", error);
       },
     );
     return () => unsub();
-  }, [id, otherUser, isGroupChat]);
+  }, [id, user]);
 
   const markRead = async (msgs: Message[]) => {
     if (!user || !id) return;
@@ -1213,7 +1218,22 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
               />
             );
           }}
-          ListHeaderComponent={isTyping ? <TypingIndicator /> : null}
+          ListHeaderComponent={
+            typingUsers.length > 0 ? (
+              <View style={{ gap: 6, paddingVertical: 4 }}>
+                {typingUsers.map((uid) => {
+                  const info = resolveReactorProfile(uid);
+                  return (
+                    <TypingIndicator
+                      key={uid}
+                      displayName={info.displayName}
+                      photoURL={info.photoURL}
+                    />
+                  );
+                })}
+              </View>
+            ) : null
+          }
         />
 
         {/* Reply Banner */}
@@ -2489,8 +2509,8 @@ const styles = StyleSheet.create({
   },
   userInfo: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
   userMeta: { flex: 1 },
-  userName: { fontSize: 16, fontWeight: "700" },
-  userOnline: { fontSize: 12, marginTop: 1 },
+  userName: { fontFamily: Typography.fontFamily.bold, fontSize: 16, fontWeight: "700" },
+  userOnline: { fontFamily: Typography.fontFamily.regular, fontSize: 12, marginTop: 1 },
   headerActions: { flexDirection: "row", gap: 8 },
   headerBtn: {
     width: 36,
@@ -2507,8 +2527,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     gap: 10,
   },
-  replyLabel: { fontSize: 12, fontWeight: "700", marginBottom: 2 },
-  replyPreview: { fontSize: 13 },
+  replyLabel: { fontFamily: Typography.fontFamily.bold, fontSize: 12, fontWeight: "700", marginBottom: 2 },
+  replyPreview: { fontFamily: Typography.fontFamily.regular, fontSize: 13 },
   blockedBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -2544,7 +2564,7 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     gap: 8,
   },
-  input: { flex: 1, fontSize: 15, maxHeight: 100, paddingVertical: 0 },
+  input: { fontFamily: Typography.fontFamily.regular, flex: 1, fontSize: 15, maxHeight: 100, paddingVertical: 0 },
   emojiBtn: { alignSelf: "flex-end", paddingBottom: 2 },
   sendBtn: {
     width: 42,

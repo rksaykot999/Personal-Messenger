@@ -44,7 +44,7 @@ if (!isWeb) {
  * Register for push notifications and return the Expo Push Token
  */
 export async function registerForPushNotificationsAsync() {
-  if (isWeb) {
+  if (isWeb || isExpoGo) {
     return null;
   }
 

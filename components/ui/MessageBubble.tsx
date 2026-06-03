@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GradientAvatar } from './GradientAvatar';
+import { Typography } from '@/constants/theme';
 
 export interface Message {
   id: string;
@@ -134,29 +135,20 @@ export function MessageBubble({
           )}
 
           {message.text ? (
-            <ScrollView
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-              style={{
-                maxHeight: 22 * 3 * (fontSizeMultiplier || 1),
-                marginTop: message.type && message.type !== 'text' ? 8 : 0,
-              }}
-              contentContainerStyle={{ flexGrow: 1 }}
+            <Text
+              style={[
+                styles.text,
+                {
+                  color: textColor,
+                  fontSize: 15 * (fontSizeMultiplier || 1),
+                  lineHeight: 22 * (fontSizeMultiplier || 1),
+                  paddingHorizontal: message.type && message.type !== 'text' ? 8 : 0,
+                  marginTop: message.type && message.type !== 'text' ? 8 : 0,
+                },
+              ]}
             >
-              <Text
-                style={[
-                  styles.text,
-                  {
-                    color: textColor,
-                    fontSize: 15 * (fontSizeMultiplier || 1),
-                    lineHeight: 22 * (fontSizeMultiplier || 1),
-                    paddingHorizontal: message.type && message.type !== 'text' ? 8 : 0,
-                  },
-                ]}
-              >
-                {message.text}
-              </Text>
-            </ScrollView>
+              {message.text}
+            </Text>
           ) : null}
 
           {/* Time + status */}
@@ -231,6 +223,7 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
   },
   editedLabel: {
+    fontFamily: Typography.fontFamily.regular,
     fontSize: 11,
     marginLeft: 6,
     alignSelf: 'center',
@@ -245,6 +238,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   senderNameText: {
+    fontFamily: Typography.fontFamily.bold,
     fontSize: 11,
     fontWeight: '700',
     marginBottom: 2,
@@ -256,9 +250,16 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 6,
   },
-  text: { fontSize: 15, lineHeight: 22 },
+  text: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 15,
+    lineHeight: 22,
+  },
   meta: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
-  time: { fontSize: 11 },
+  time: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 11,
+  },
   replyBox: {
     borderLeftWidth: 3,
     paddingLeft: 8,
@@ -267,8 +268,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 4,
   },
-  replyName: { fontSize: 12, fontWeight: '700', marginBottom: 2 },
-  replyText: { fontSize: 12 },
+  replyName: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  replyText: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+  },
   reactions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -284,7 +293,11 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   reactionEmoji: { fontSize: 14 },
-  reactionCount: { fontSize: 12, fontWeight: '600' },
+  reactionCount: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   mediaImage: {
     width: 240,
     height: 180,

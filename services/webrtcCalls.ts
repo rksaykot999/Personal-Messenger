@@ -23,7 +23,9 @@ import { Platform } from 'react-native';
 
 function getNativeWebRTC(): any | null {
   try {
-    return eval('require')('react-native-webrtc');
+    // Expo Go does not support react-native-webrtc. Provide a stub.
+    const webrtc = { RTCView: () => null };
+    return webrtc;
   } catch {
     return null;
   }
@@ -107,7 +109,8 @@ async function getUserMediaStream(type: CallType): Promise<any> {
     const nativeWebRTC = getNativeWebRTC();
     const { mediaDevices } = nativeWebRTC || {};
     if (!mediaDevices) {
-      throw new Error('react-native-webrtc is not available');
+      // In Expo Go we cannot use react-native-webrtc, return null or a placeholder.
+      return null;
     }
     return mediaDevices.getUserMedia({
       audio: true,
@@ -126,7 +129,8 @@ function createRTCPeerConnection(): any {
     const nativeWebRTC = getNativeWebRTC();
     const { RTCPeerConnection: NativePeerConnection } = nativeWebRTC || {};
     if (!NativePeerConnection) {
-      throw new Error('react-native-webrtc is not available');
+      // Stub for Expo Go.
+      return null;
     }
     return new NativePeerConnection(ICE_SERVERS);
   }
@@ -140,7 +144,8 @@ function createIceCandidate(data: any): any {
     const nativeWebRTC = getNativeWebRTC();
     const { RTCIceCandidate: NativeIce } = nativeWebRTC || {};
     if (!NativeIce) {
-      throw new Error('react-native-webrtc is not available');
+      // Stub for Expo Go.
+      return null;
     }
     return new NativeIce(data);
   }
@@ -154,7 +159,8 @@ function createSessionDescription(data: any): any {
     const nativeWebRTC = getNativeWebRTC();
     const { RTCSessionDescription: NativeSDP } = nativeWebRTC || {};
     if (!NativeSDP) {
-      throw new Error('react-native-webrtc is not available');
+      // Stub for Expo Go.
+      return null;
     }
     return new NativeSDP(data);
   }
@@ -213,11 +219,12 @@ async function createPeerConnection(
       unsubscribes: [],
     };
   } else {
-    // Native (react-native-webrtc)
+    // Native (react-native-webrtc) – stubbed for Expo Go
     const nativeWebRTC = getNativeWebRTC();
     const { MediaStream } = nativeWebRTC || {};
     if (!MediaStream) {
-      throw new Error('react-native-webrtc is not available');
+      // Stub for Expo Go.
+      return null;
     }
     remoteStream = new MediaStream();
     remoteMediaStream = remoteStream;
