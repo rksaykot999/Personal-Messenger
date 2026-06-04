@@ -1,9 +1,9 @@
 import { GradientAvatar } from "@/components/ui/GradientAvatar";
 import { Message, MessageBubble } from "@/components/ui/MessageBubble";
 import { TypingIndicator } from "@/components/ui/TypingIndicator";
+import { Typography } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Typography } from "@/constants/theme";
 import { db } from "@/services/firebase";
 import { dismissAllNotifications, sendPushNotificationAsync } from "@/services/notifications";
 import { uploadToSupabaseRest } from "@/services/supabase";
@@ -1889,16 +1889,19 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
           animationType="slide"
           onRequestClose={() => setPendingMedia(null)}
         >
-          <View style={{ flex: 1, backgroundColor: "#000" }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1, backgroundColor: "#000" }}
+          >
             {/* Top Bar with Cancel Button */}
             <View
               style={{
-                position: "absolute",
-                top: 50,
-                left: 16,
-                right: 16,
+                paddingTop: 50,
+                paddingHorizontal: 16,
+                paddingBottom: 12,
                 flexDirection: "row",
                 justifyContent: "space-between",
+                alignItems: "center",
                 zIndex: 10,
               }}
             >
@@ -1915,28 +1918,34 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
               >
                 <Ionicons name="close" size={24} color="#fff" />
               </TouchableOpacity>
-              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", alignSelf: "center" }}>
+              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", textAlign: "center", flex: 1 }}>
                 Preview {pendingMedia.type === "image" ? "Photo" : "Video"}
               </Text>
               <View style={{ width: 40 }} />
             </View>
 
-            {/* Media Preview Area */}
-            <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingBottom: 100 }}>
+            {/* Media Preview Area - Scrollable */}
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ justifyContent: "center", alignItems: "center", paddingVertical: 20 }}
+              showsVerticalScrollIndicator={false}
+            >
               {pendingMedia.type === "image" ? (
                 <Image
                   source={{ uri: pendingMedia.uri }}
-                  style={{ width: "100%", height: "70%" }}
+                  style={{ width: "100%", height: 400, resizeMode: "contain" }}
                   contentFit="contain"
                 />
               ) : (
                 <View
                   style={{
                     width: "100%",
-                    height: "70%",
+                    height: 300,
                     backgroundColor: "#111",
                     justifyContent: "center",
                     alignItems: "center",
+                    borderRadius: 12,
+                    marginHorizontal: 16,
                   }}
                 >
                   <Ionicons name="videocam" size={80} color="#fff" style={{ opacity: 0.8 }} />
@@ -1945,67 +1954,67 @@ export default function ChatScreen({ chatId: propChatId }: { chatId?: string }) 
                   </Text>
                 </View>
               )}
-            </View>
+            </ScrollView>
 
             {/* Bottom Caption Input Bar */}
-            <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : "height"}
-              style={{ position: "absolute", bottom: 0, left: 0, right: 0 }}
+            <LinearGradient
+              colors={["transparent", "rgba(0,0,0,0.95)"]}
+              style={{
+                paddingHorizontal: 16,
+                paddingBottom: 24,
+                paddingTop: 16,
+                flexDirection: "row",
+                alignItems: "flex-end",
+                gap: 12,
+              }}
             >
-              <LinearGradient
-                colors={["transparent", "rgba(0,0,0,0.95)"]}
+              {/* Caption Input */}
+              <View
                 style={{
-                  paddingHorizontal: 16,
-                  paddingBottom: 24,
-                  paddingTop: 40,
+                  flex: 1,
                   flexDirection: "row",
-                  alignItems: "center",
-                  gap: 12,
+                  alignItems: "flex-end",
+                  backgroundColor: "rgba(0,0,0,0.5)",
+                  borderRadius: 24,
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderWidth: 1,
+                  borderColor: "rgba(255,255,255,0.2)",
+                  minHeight: 44,
                 }}
               >
-                {/* FIX: Changed background from light to dark so white text is visible */}
-                <View
-                  style={{
-                    flex: 1,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: "rgba(0,0,0,0.5)",
-                    borderRadius: 24,
-                    paddingHorizontal: 16,
-                    paddingVertical: 8,
-                  }}
-                >
-                  <TextInput
-                    style={{ flex: 1, color: "#fff", fontSize: 15, maxHeight: 80, paddingVertical: 0 }}
-                    placeholder="Add a caption..."
-                    placeholderTextColor="rgba(255,255,255,0.5)"
-                    value={captionText}
-                    onChangeText={setCaptionText}
-                    multiline
-                  />
-                </View>
-                <TouchableOpacity
-                  onPress={async () => {
-                    const media = pendingMedia;
-                    const text = captionText;
-                    setPendingMedia(null);
-                    setCaptionText("");
-                    await uploadAndSendMedia(media.uri, media.type, text);
-                  }}
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 24,
-                    backgroundColor: theme.primary,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Ionicons name="send" size={20} color="#fff" />
-                </TouchableOpacity>
-              </LinearGradient>
-            </KeyboardAvoidingView>
-          </View>
+                <TextInput
+                  style={{ flex: 1, color: "#fff", fontSize: 15, maxHeight: 100, paddingVertical: 8 }}
+                  placeholder="Add a caption..."
+                  placeholderTextColor="rgba(255,255,255,0.5)"
+                  value={captionText}
+                  onChangeText={setCaptionText}
+                  multiline
+                  textAlignVertical="center"
+                />
+              </View>
+              <TouchableOpacity
+                onPress={async () => {
+                  const media = pendingMedia;
+                  const text = captionText;
+                  setPendingMedia(null);
+                  setCaptionText("");
+                  await uploadAndSendMedia(media.uri, media.type, text);
+                }}
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  backgroundColor: theme.primary,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 4,
+                }}
+              >
+                <Ionicons name="send" size={20} color="#fff" />
+              </TouchableOpacity>
+            </LinearGradient>
+          </KeyboardAvoidingView>
         </Modal>
       )}
 

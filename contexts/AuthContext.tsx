@@ -27,6 +27,12 @@ export interface UserProfile {
   pushToken?: string;
   friends?: string[];
   blockedUsers?: string[];
+  // Personal information
+  gender?: string;
+  birthday?: string;
+  phone?: string;
+  location?: string;
+  website?: string;
   // Notification settings
   pushNotificationsEnabled?: boolean;
   messageSoundsEnabled?: boolean;

@@ -1,16 +1,24 @@
-import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, StatusBar, Platform, Alert, ActivityIndicator,
-} from 'react-native';
+import { GradientAvatar } from '@/components/ui/GradientAvatar';
+import { PremiumButton } from '@/components/ui/PremiumButton';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { uploadToSupabaseRest } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
-import { GradientAvatar } from '@/components/ui/GradientAvatar';
-import { PremiumButton } from '@/components/ui/PremiumButton';
-import { uploadToSupabaseRest } from '@/services/supabase';
+import React, { useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  Platform,
+  ScrollView, StatusBar,
+  StyleSheet,
+  Text,
+  TextInput, TouchableOpacity,
+  View
+} from 'react-native';
 
 export default function EditProfileScreen() {
   const { theme } = useTheme();
@@ -19,11 +27,19 @@ export default function EditProfileScreen() {
   const [bio, setBio] = useState(userProfile?.bio || '');
   const [status, setStatus] = useState(userProfile?.status || '');
   const [statusEmoji, setStatusEmoji] = useState(userProfile?.statusEmoji || '👋');
+  const [gender, setGender] = useState(userProfile?.gender || '');
+  const [birthday, setBirthday] = useState(userProfile?.birthday || '');
+  const [phone, setPhone] = useState(userProfile?.phone || '');
+  const [location, setLocation] = useState(userProfile?.location || '');
+  const [website, setWebsite] = useState(userProfile?.website || '');
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [localPhotoPreview, setLocalPhotoPreview] = useState<string | null>(null);
+  const [genderModalVisible, setGenderModalVisible] = useState(false);
+
   const statusBarH = Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 44;
   const profilePhotoURL = localPhotoPreview || userProfile?.photoURL;
+  const genders = ['Male', 'Female', 'Non-binary', 'Prefer not to say', 'Other'];
 
   const EMOJI_OPTIONS = ['👋', '😊', '🔥', '💻', '🎵', '✈️', '📚', '🏠', '😴', '🎮'];
 
@@ -90,11 +106,47 @@ export default function EditProfileScreen() {
     }
   };
 
+  const handleRemoveProfilePhoto = () => {
+    Alert.alert(
+      'Remove Profile Photo',
+      'Are you sure you want to remove your profile photo?',
+      [
+        { text: 'Cancel', onPress: () => { }, style: 'cancel' },
+        {
+          text: 'Remove',
+          onPress: async () => {
+            try {
+              setUploadingPhoto(true);
+              await updateUserProfile({ photoURL: null });
+              setLocalPhotoPreview(null);
+              showMessage('Photo removed', 'Your profile photo has been removed.');
+            } catch (error: any) {
+              showMessage('Error', error?.message || 'Could not remove your profile photo.');
+            } finally {
+              setUploadingPhoto(false);
+            }
+          },
+          style: 'destructive',
+        },
+      ],
+    );
+  };
+
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('Name required', 'Please enter your display name.'); return; }
     setSaving(true);
     try {
-      await updateUserProfile({ displayName: name.trim(), bio: bio.trim(), status: status.trim(), statusEmoji });
+      await updateUserProfile({
+        displayName: name.trim(),
+        bio: bio.trim(),
+        status: status.trim(),
+        statusEmoji,
+        gender: gender.trim(),
+        birthday: birthday.trim(),
+        phone: phone.trim(),
+        location: location.trim(),
+        website: website.trim(),
+      });
       Alert.alert('Saved!', 'Your profile has been updated.');
       router.back();
     } catch { Alert.alert('Error', 'Failed to save profile.'); }
@@ -133,6 +185,15 @@ export default function EditProfileScreen() {
           <Text style={[styles.changePhotoText, { color: theme.textSecondary }]}>
             {uploadingPhoto ? 'Uploading photo...' : 'Tap to change photo'}
           </Text>
+          {profilePhotoURL && (
+            <TouchableOpacity
+              onPress={handleRemoveProfilePhoto}
+              disabled={uploadingPhoto}
+              style={{ marginTop: 8 }}
+            >
+              <Text style={[styles.removePhotoText, { color: '#ef4444' }]}>Remove Photo</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Fields */}
@@ -190,8 +251,10 @@ export default function EditProfileScreen() {
                   onPress={() => setStatusEmoji(e)}
                   style={[
                     styles.emojiOption,
-                    { backgroundColor: e === statusEmoji ? `${theme.primary}30` : theme.inputBg,
-                      borderColor: e === statusEmoji ? theme.primary : 'transparent' }
+                    {
+                      backgroundColor: e === statusEmoji ? `${theme.primary}30` : theme.inputBg,
+                      borderColor: e === statusEmoji ? theme.primary : 'transparent'
+                    }
                   ]}
                 >
                   <Text style={{ fontSize: 22 }}>{e}</Text>
@@ -199,10 +262,136 @@ export default function EditProfileScreen() {
               ))}
             </View>
           </View>
+
+          {/* Gender Section */}
+          <View>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Gender</Text>
+            <TouchableOpacity
+              onPress={() => setGenderModalVisible(true)}
+              style={[styles.inputWrap, { backgroundColor: theme.inputBg, borderColor: theme.border }]}
+            >
+              <Ionicons name="person-circle-outline" size={18} color={theme.textTertiary} />
+              <Text style={[styles.dropdownText, { color: gender ? theme.text : theme.textTertiary, flex: 1 }]}>
+                {gender || 'Select gender'}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color={theme.textTertiary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Birthday Section */}
+          <View>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Birthday</Text>
+            <View style={[styles.inputWrap, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+              <Ionicons name="calendar-outline" size={18} color={theme.textTertiary} />
+              <TextInput
+                value={birthday}
+                onChangeText={setBirthday}
+                placeholder="MM/DD/YYYY"
+                placeholderTextColor={theme.textTertiary}
+                style={[styles.input, { color: theme.text }]}
+              />
+            </View>
+          </View>
+
+          {/* Phone Section */}
+          <View>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Phone Number</Text>
+            <View style={[styles.inputWrap, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+              <Ionicons name="call-outline" size={18} color={theme.textTertiary} />
+              <TextInput
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="+1 (555) 123-4567"
+                placeholderTextColor={theme.textTertiary}
+                keyboardType="phone-pad"
+                style={[styles.input, { color: theme.text }]}
+              />
+            </View>
+          </View>
+
+          {/* Location Section */}
+          <View>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Location</Text>
+            <View style={[styles.inputWrap, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+              <Ionicons name="location-outline" size={18} color={theme.textTertiary} />
+              <TextInput
+                value={location}
+                onChangeText={setLocation}
+                placeholder="City, Country"
+                placeholderTextColor={theme.textTertiary}
+                style={[styles.input, { color: theme.text }]}
+              />
+            </View>
+          </View>
+
+          {/* Website Section */}
+          <View>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Website</Text>
+            <View style={[styles.inputWrap, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+              <Ionicons name="globe-outline" size={18} color={theme.textTertiary} />
+              <TextInput
+                value={website}
+                onChangeText={setWebsite}
+                placeholder="https://example.com"
+                placeholderTextColor={theme.textTertiary}
+                keyboardType="url"
+                style={[styles.input, { color: theme.text }]}
+              />
+            </View>
+          </View>
         </View>
 
         <PremiumButton title="Save Changes" onPress={handleSave} loading={saving} size="lg" style={{ marginTop: 8 }} />
       </ScrollView>
+
+      {/* Gender Modal */}
+      <Modal
+        visible={genderModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setGenderModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Select Gender</Text>
+              <TouchableOpacity onPress={() => setGenderModalVisible(false)}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={genders}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => {
+                    setGender(item);
+                    setGenderModalVisible(false);
+                  }}
+                  style={[
+                    styles.genderOption,
+                    {
+                      backgroundColor: item === gender ? `${theme.primary}15` : 'transparent',
+                      borderBottomColor: theme.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.genderOptionText,
+                      { color: item === gender ? theme.primary : theme.text, fontWeight: item === gender ? '600' : '500' },
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                  {item === gender && <Ionicons name="checkmark" size={20} color={theme.primary} />}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -231,6 +420,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   changePhotoText: { fontSize: 13 },
+  removePhotoText: { fontSize: 13, fontWeight: '600' },
   fields: { gap: 16 },
   label: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
   inputWrap: {
@@ -238,9 +428,35 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13, gap: 10,
   },
   input: { flex: 1, fontSize: 15, paddingVertical: 0 },
+  dropdownText: { fontSize: 15 },
   emojiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   emojiOption: {
     width: 50, height: 50, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center', borderWidth: 2,
   },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingTop: 0,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '700' },
+  genderOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  genderOptionText: { fontSize: 15 },
 });
