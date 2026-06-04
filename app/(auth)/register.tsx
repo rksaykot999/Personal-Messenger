@@ -12,14 +12,14 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { PremiumButton } from '@/components/ui/PremiumButton';
 import { GradientAvatar } from '@/components/ui/GradientAvatar';
 
-import { signInWithGoogleCredential, signInWithGoogleWeb } from '@/services/firebase';
+import { signInWithGoogleCredential, signInWithGoogleWeb, signInWithFacebookWeb } from '@/services/firebase';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri } from 'expo-auth-session';
+// (keep imports minimal) removed makeRedirectUri
 
 WebBrowser.maybeCompleteAuthSession();
 
-const WEB_CLIENT_ID = '443606839141-b3r8kbuqdsbe719dhkuejp0rdl1jijk9.apps.googleusercontent.com';
+const WEB_CLIENT_ID = '980124602830-fuinut6s1ark4mu4g8a2bmbhfsm0o206.apps.googleusercontent.com';
 const ANDROID_CLIENT_ID = WEB_CLIENT_ID;
 const IOS_CLIENT_ID = WEB_CLIENT_ID;
 
@@ -32,16 +32,20 @@ function NativeGoogleAuth({
   setGoogleLoading: (v: boolean) => void;
   showAlert: (t: string, m: string) => void;
 }) {
+  // Expo Auth Proxy redirect URI - must match exactly what's in Google Cloud Console
+  const redirectUri = 'https://auth.expo.io/@rksaykot999/personal-messenger';
+
   const [request, response, promptAsync] = Google.useAuthRequest({
     androidClientId: ANDROID_CLIENT_ID || undefined,
     iosClientId: IOS_CLIENT_ID || undefined,
     webClientId: WEB_CLIENT_ID || undefined,
-    redirectUri: makeRedirectUri(),
+    redirectUri,
   });
+
 
   React.useEffect(() => {
     if (promptRef && promptAsync) {
-      promptRef.current = promptAsync;
+      promptRef.current = () => promptAsync();
     }
   }, [promptAsync]);
 
@@ -105,6 +109,21 @@ export default function RegisterScreen() {
       } catch (err) {
         console.error('promptAsync failed', err);
       }
+    }
+  };
+
+  const handleFacebookSignIn = async () => {
+    if (Platform.OS === 'web') {
+      setGoogleLoading(true);
+      try {
+        await signInWithFacebookWeb();
+      } catch (e: any) {
+        showAlert('Facebook Sign-In Failed', e.message || 'Please try again');
+      } finally {
+        setGoogleLoading(false);
+      }
+    } else {
+      showAlert('Coming Soon', 'Facebook Sign-In on mobile requires a full app build.');
     }
   };
 
@@ -265,10 +284,11 @@ export default function RegisterScreen() {
                   : <Ionicons name="logo-google" size={24} color={theme.text} />
                 }
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Apple Sign-In will be available soon.')}>
-                <Ionicons name="logo-apple" size={24} color={theme.text} />
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.socialBtn, { borderColor: theme.border }]} onPress={() => Alert.alert('Coming soon', 'Facebook Sign-In will be available soon.')}>
+              <TouchableOpacity
+                style={[styles.socialBtn, { borderColor: theme.border }]}
+                onPress={handleFacebookSignIn}
+                disabled={googleLoading}
+              >
                 <Ionicons name="logo-facebook" size={24} color={theme.text} />
               </TouchableOpacity>
             </View>

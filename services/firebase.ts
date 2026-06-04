@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 // @ts-ignore
-import { Auth, getAuth, initializeAuth, getReactNativePersistence, GoogleAuthProvider, signInWithCredential, signInWithPopup } from 'firebase/auth';
+import { Auth, FacebookAuthProvider, getAuth, GoogleAuthProvider, initializeAuth, getReactNativePersistence, signInWithCredential, signInWithPopup } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { Platform } from 'react-native';
@@ -40,7 +40,6 @@ export default app;
 
 /**
  * Web: Sign in with Google using Firebase popup.
- * Works without any client ID configuration.
  */
 export async function signInWithGoogleWeb() {
   const provider = new GoogleAuthProvider();
@@ -51,9 +50,18 @@ export async function signInWithGoogleWeb() {
 
 /**
  * Native: Sign in with Google using a token obtained from expo-auth-session.
- * Call this after you get the idToken/accessToken from Google.useAuthRequest hook.
  */
 export async function signInWithGoogleCredential(idToken: string, accessToken?: string) {
   const credential = GoogleAuthProvider.credential(idToken, accessToken);
   return signInWithCredential(auth, credential);
+}
+
+/**
+ * Web: Sign in with Facebook using Firebase popup.
+ */
+export async function signInWithFacebookWeb() {
+  const provider = new FacebookAuthProvider();
+  provider.addScope('email');
+  provider.addScope('public_profile');
+  return signInWithPopup(auth, provider);
 }
