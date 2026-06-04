@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
-// @ts-ignore
-import { Auth, FacebookAuthProvider, getAuth, GoogleAuthProvider, initializeAuth, getReactNativePersistence, signInWithCredential, signInWithPopup } from 'firebase/auth';
+import { Auth, EmailAuthProvider, FacebookAuthProvider, getAuth, GoogleAuthProvider, linkWithCredential, signInWithCredential, signInWithPopup } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { Platform } from 'react-native';
@@ -16,19 +15,24 @@ const firebaseConfig = {
   measurementId: "G-MM90FMM35Y",
 };
 
-// Initialize Firebase (prevent duplicate init on hot reload)
+// Initialize Firebase
 const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 let auth: Auth;
 
-if (Platform.OS === 'web') {
+const isWeb = Platform.OS === 'web';
+if (isWeb) {
   auth = getAuth(app);
 } else {
   try {
-    auth = initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage),
-    });
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const rnAuth = require('firebase/auth/react-native');
+    const { initializeAuth: initializeAuthRN, getReactNativePersistence: getReactNativePersistenceRN } = rnAuth;
+    auth = initializeAuthRN(app, { persistence: getReactNativePersistenceRN(AsyncStorage) });
   } catch (error) {
+    // ত্রুটি সংশোধন: error টি Error টাইপের কি না তা চেক করা হচ্ছে
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.warn('React Native Firebase auth helpers not available, falling back to getAuth():', errorMessage);
     auth = getAuth(app);
   }
 }
@@ -64,4 +68,14 @@ export async function signInWithFacebookWeb() {
   provider.addScope('email');
   provider.addScope('public_profile');
   return signInWithPopup(auth, provider);
+}
+
+/**
+ * Link the currently signed-in (e.g., Google) user with an email/password credential.
+ */
+export async function linkCurrentUserWithEmailPassword(password: string) {
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error('No signed-in user with an email address available to link.');
+  const credential = EmailAuthProvider.credential(user.email, password);
+  return linkWithCredential(user, credential);
 }

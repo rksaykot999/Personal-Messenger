@@ -1,17 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  updateProfile,
-  sendPasswordResetEmail,
-  deleteUser,
-  User,
-} from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, deleteDoc, serverTimestamp, onSnapshot, deleteField } from 'firebase/firestore';
 import { auth, db } from '@/services/firebase';
 import { registerForPushNotificationsAsync } from '@/services/notifications';
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
+  User,
+} from 'firebase/auth';
+import { deleteDoc, deleteField, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 export interface UserProfile {
   uid: string;
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
-      
+
       if (profileUnsub) {
         profileUnsub();
         profileUnsub = null;
@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isOnline: true,
             lastSeen: serverTimestamp(),
           });
-          
+
           // REAL-TIME profile listener
           profileUnsub = onSnapshot(doc(db, 'users', firebaseUser.uid), (snap) => {
             if (snap.exists()) {
@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               signOut(auth);
             }
           });
-          
+
           // Request and save push token
           try {
             const token = await registerForPushNotificationsAsync();
@@ -153,7 +153,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+    try {
+      // Log attempt for diagnostics
+      // eslint-disable-next-line no-console
+      console.log('Attempting password reset for', email);
+      await sendPasswordResetEmail(auth, email);
+      // eslint-disable-next-line no-console
+      console.log('Password reset email sent (request accepted) for', email);
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('sendPasswordResetEmail error:', e);
+      throw e;
+    }
   };
 
   const updateUserProfile = async (data: Partial<UserProfile>) => {
